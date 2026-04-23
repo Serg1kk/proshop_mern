@@ -6,12 +6,15 @@
   "type": "module",
   "scripts": {
     "start": "node backend/server",
-    "server": "nodemon backend/server",
-    "client": "npm start --prefix frontend",
+    "server": "nodemon --legacy-watch backend/server.js",
+    "client": "NODE_OPTIONS=--openssl-legacy-provider npm start --prefix frontend",
     "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "mongo:up": "docker compose up -d mongo",
+    "mongo:down": "docker compose down",
     "data:import": "node backend/seeder",
     "data:destroy": "node backend/seeder -d",
-    "heroku-postbuild": "NPM_CONFIG_PRODUCTION=false npm install --prefix frontend && npm run build --prefix frontend"
+    "data:import-extra": "node backend/seedExtra",
+    "heroku-postbuild": "NPM_CONFIG_PRODUCTION=false npm install --prefix frontend && NODE_OPTIONS=--openssl-legacy-provider npm run build --prefix frontend"
   },
   "author": "Brad Traversy",
   "license": "MIT",
