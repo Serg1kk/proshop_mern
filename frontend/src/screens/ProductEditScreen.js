@@ -8,6 +8,7 @@ import Loader from '../components/Loader'
 import FormContainer from '../components/FormContainer'
 import { listProductDetails, updateProduct } from '../actions/productActions'
 import { PRODUCT_UPDATE_RESET } from '../constants/productConstants'
+import store from '../store'
 
 const ProductEditScreen = ({ match, history }) => {
   const productId = match.params.id
@@ -59,9 +60,14 @@ const ProductEditScreen = ({ match, history }) => {
     setUploading(true)
 
     try {
+      const {
+        userLogin: { userInfo },
+      } = store.getState()
+
       const config = {
         headers: {
           'Content-Type': 'multipart/form-data',
+          Authorization: userInfo ? `Bearer ${userInfo.token}` : undefined,
         },
       }
 
