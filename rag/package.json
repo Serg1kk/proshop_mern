@@ -1,0 +1,23 @@
+{
+  "name": "proshop-rag",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "RAG pipeline (ingest + search) for proshop_mern docs/",
+  "scripts": {
+    "test": "node --test --test-concurrency=1 tests/",
+    "test:unit": "node --test tests/metadata.test.js tests/chunker.test.js",
+    "test:integration": "node --test --test-concurrency=1 tests/search.test.js tests/server.test.js"
+  },
+  "dependencies": {
+    "weaviate-client": "^3.2.0",
+    "cohere-ai": "^7.14.0",
+    "express": "^4.19.2",
+    "dotenv": "^16.4.5",
+    "glob": "^10.4.5",
+    "unified": "^11.0.5",
+    "remark-parse": "^11.0.0",
+    "mdast-util-to-string": "^4.0.0",
+    "tiktoken": "^1.0.17"
+  }
+}

@@ -14,7 +14,12 @@
     "data:import": "node backend/seeder",
     "data:destroy": "node backend/seeder -d",
     "data:import-extra": "node backend/seedExtra",
-    "heroku-postbuild": "NPM_CONFIG_PRODUCTION=false npm install --prefix frontend && NODE_OPTIONS=--openssl-legacy-provider npm run build --prefix frontend"
+    "heroku-postbuild": "NPM_CONFIG_PRODUCTION=false npm install --prefix frontend && NODE_OPTIONS=--openssl-legacy-provider npm run build --prefix frontend",
+    "weaviate:up": "docker compose up -d weaviate",
+    "weaviate:down": "docker compose stop weaviate",
+    "rag:install": "npm install --prefix rag",
+    "rag:ingest": "node rag/ingest.js",
+    "rag:server": "node rag/server.js"
   },
   "author": "Brad Traversy",
   "license": "MIT",
