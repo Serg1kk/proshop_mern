@@ -1486,8 +1486,838 @@ After completing Tasks 2.1–2.3 and 3.1–3.2, run all unit tests:
 ```bash
 cd proshop_mern/rag && npm run test:unit
 ```
-Expected: 20+ passes, 0 fails. Then dispatch reviewer for Chunks 2–3.
+Expected: 20+ passes, 0 fails.
 
 ---
 
-(Chunks 4–5 to be added next.)
+## Chunk 4: Ingest CLI
+
+Goal: walk corpus, chunk, dedup by sha1-set equality, batch-embed via Cohere, upsert to Weaviate. Spec sections: §8.
+
+### Task 4.1: Sample corpus for integration test
+
+**Files:**
+- Create: `proshop_mern/rag/tests/fixtures/sample-corpus/runbooks/db-seed-and-reset.md`
+- Create: `proshop_mern/rag/tests/fixtures/sample-corpus/incidents/i-001-paypal-double-charge.md`
+- Create: `proshop_mern/rag/tests/fixtures/sample-corpus/incidents/i-003-jwt-secret-leak.md`
+- Create: `proshop_mern/rag/tests/fixtures/sample-corpus/adr/adr-004-paypal-vs-stripe.md`
+
+- [ ] **Step 1: Copy 4 real docs into sample-corpus**
+
+```bash
+cd proshop_mern
+mkdir -p rag/tests/fixtures/sample-corpus/runbooks rag/tests/fixtures/sample-corpus/incidents rag/tests/fixtures/sample-corpus/adr
+cp docs/runbooks/db-seed-and-reset.md           rag/tests/fixtures/sample-corpus/runbooks/
+cp docs/incidents/i-001-paypal-double-charge.md rag/tests/fixtures/sample-corpus/incidents/
+cp docs/incidents/i-003-jwt-secret-leak.md      rag/tests/fixtures/sample-corpus/incidents/
+cp docs/adr/adr-004-paypal-vs-stripe.md         rag/tests/fixtures/sample-corpus/adr/
+ls -la rag/tests/fixtures/sample-corpus/*/
+```
+Expected: 4 files visible. **Important:** integration tests reuse these via the `rag/tests/fixtures/sample-corpus` path — `detectDocType` walks the path and finds `incidents/`, `adr/`, `runbooks/` segments and returns the right type even though the prefix is unusual.
+
+- [ ] **Step 2: Verify `detectDocType` handles sample-corpus paths**
+
+```bash
+cd proshop_mern/rag && node -e "
+import('./lib/metadata.js').then(({detectDocType}) => {
+  console.log(detectDocType('rag/tests/fixtures/sample-corpus/incidents/i-001.md')); // incident
+  console.log(detectDocType('rag/tests/fixtures/sample-corpus/adr/adr-004.md'));     // adr
+  console.log(detectDocType('rag/tests/fixtures/sample-corpus/runbooks/x.md'));      // runbook
+});
+"
+```
+Expected: `incident`, `adr`, `runbook` printed in order. (Path walker uses `lastIndexOf('docs')` — will fail on these paths! Fix in next step.)
+
+- [ ] **Step 3: Generalize `detectDocType` to walk by segment names, not by `docs/` anchor**
+
+Edit `rag/lib/metadata.js` — replace the `lastIndexOf('docs')` logic with: scan path segments, find first segment matching one of the known directory names (`adr`, `api`, `features`, `incidents`, `pages`, `runbooks`); the segment immediately *before* the file determines type. For root `.md` directly under `docs/` (or under `sample-corpus/`), return `reference`. Specifically:
+
+```js
+export function detectDocType(filePath) {
+  const norm = filePath.replaceAll('\\', '/');
+  if (norm.endsWith('/features.json') || norm === 'features.json') {
+    return 'feature_spec';
+  }
+  const parts = norm.split('/');
+  // Walk parts and find a known type-dir on the way down
+  for (let i = 0; i < parts.length - 1; i++) {
+    const segment = parts[i];
+    if (TYPE_BY_DIR[segment]) {
+      return TYPE_BY_DIR[segment];
+    }
+  }
+  // Top-level .md in docs/ or any corpus root → reference
+  if (norm.endsWith('.md')) return 'reference';
+  throw new Error(`unknown path: ${filePath}`);
+}
+```
+
+- [ ] **Step 4: Add tests for new path walker**
+
+Append to `rag/tests/metadata.test.js`:
+
+```js
+test('detectDocType: works for sample-corpus paths (no docs/ prefix)', () => {
+  assert.equal(detectDocType('rag/tests/fixtures/sample-corpus/incidents/i-001.md'), 'incident');
+  assert.equal(detectDocType('rag/tests/fixtures/sample-corpus/adr/adr-004.md'), 'adr');
+});
+test('detectDocType: works for absolute paths', () => {
+  assert.equal(detectDocType('/abs/path/docs/runbooks/deploy.md'), 'runbook');
+});
+```
+
+- [ ] **Step 5: Run tests, all green**
+
+```bash
+cd proshop_mern/rag && npm run test:unit
+```
+Expected: previous tests still pass + 2 new ones.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add proshop_mern/rag/tests/fixtures/sample-corpus proshop_mern/rag/lib/metadata.js proshop_mern/rag/tests/metadata.test.js
+git commit -m "feat(rag): support sample-corpus paths in detectDocType"
+```
+
+---
+
+### Task 4.2: `ingest.js` CLI
+
+**Files:**
+- Create: `proshop_mern/rag/ingest.js`
+
+- [ ] **Step 1: Implement CLI**
+
+Create `rag/ingest.js`:
+
+```js
+#!/usr/bin/env node
+import 'dotenv/config';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { glob } from 'glob';
+import * as wv from './lib/weaviate.js';
+import { createCohereClient } from './lib/cohere.js';
+import { chunkMarkdown, chunkFeaturesJson } from './lib/chunker.js';
+
+const EMBED_BATCH_SIZE = 96;
+const SLEEP_BETWEEN_BATCHES_MS = 50;
+const MAX_RETRIES = 3;
+
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+const parseArgs = (argv) => {
+  const args = { path: null, dryRun: false, reset: false, filter: null };
+  for (const a of argv.slice(2)) {
+    if (a.startsWith('--path=')) args.path = a.slice(7);
+    else if (a === '--dry-run') args.dryRun = true;
+    else if (a === '--reset') args.reset = true;
+    else if (a.startsWith('--filter=')) args.filter = a.slice(9);
+    else if (a === '--help' || a === '-h') { printHelp(); process.exit(0); }
+    else { console.error(`unknown arg: ${a}`); process.exit(2); }
+  }
+  return args;
+};
+
+const printHelp = () => {
+  console.log(`Usage: node ingest.js [--path=<file|dir>] [--dry-run] [--reset] [--filter=doc_type=runbook]
+Walks docs/ (or --path), chunks markdown, dedups by sha1-set per file, embeds via Cohere,
+upserts to Weaviate. Without --path, walks proshop_mern/docs/ from the rag/ working dir.`);
+};
+
+const discoverFiles = async (root) => {
+  // Returns array of absolute file paths matching .md or features.json
+  const stat = await fs.stat(root).catch(() => null);
+  if (!stat) throw new Error(`path not found: ${root}`);
+  if (stat.isFile()) return [root];
+  const md = await glob('**/*.md', { cwd: root, absolute: true, nodir: true });
+  const json = await glob('**/features.json', { cwd: root, absolute: true, nodir: true });
+  return [...md, ...json].sort();
+};
+
+const relPath = (absPath) => {
+  // Compute path relative to repo root (proshop_mern/) for stable source_file in metadata.
+  const cwd = process.cwd();
+  const repoRoot = cwd.endsWith('/rag') ? path.resolve(cwd, '..') : cwd;
+  return path.relative(repoRoot, absPath).replaceAll('\\', '/');
+};
+
+const fileToChunks = async (absPath) => {
+  const rel = relPath(absPath);
+  const content = await fs.readFile(absPath, 'utf8');
+  if (absPath.endsWith('.json')) {
+    return chunkFeaturesJson(JSON.parse(content), rel);
+  }
+  return chunkMarkdown(content, rel);
+};
+
+const withRetry = async (fn, label) => {
+  let lastErr;
+  for (let i = 0; i < MAX_RETRIES; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastErr = e;
+      const status = e?.status || e?.statusCode;
+      if (status === 429 || (status >= 500 && status < 600)) {
+        const delay = 500 * Math.pow(2, i);
+        console.warn(`${label}: retry ${i + 1}/${MAX_RETRIES} after ${delay}ms (status ${status})`);
+        await sleep(delay);
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw lastErr;
+};
+
+const setsEqual = (a, b) => {
+  if (a.size !== b.size) return false;
+  for (const v of a) if (!b.has(v)) return false;
+  return true;
+};
+
+async function main() {
+  const args = parseArgs(process.argv);
+
+  const cohere = createCohereClient({
+    apiKey: process.env.COHERE_API_KEY,
+    embedModel: process.env.COHERE_EMBED_MODEL,
+    rerankModel: process.env.COHERE_RERANK_MODEL
+  });
+  const client = await wv.connect({
+    host: process.env.WEAVIATE_HOST || 'localhost',
+    httpPort: +(process.env.WEAVIATE_HTTP_PORT || 8080),
+    grpcPort: +(process.env.WEAVIATE_GRPC_PORT || 50051)
+  });
+
+  if (args.reset) {
+    console.log('--reset: dropping ProshopDoc class');
+    try { await wv.dropClass(client); } catch (_) { /* might not exist */ }
+  }
+  await wv.ensureSchema(client);
+
+  const root = args.path || path.resolve(process.cwd(), '../docs');
+  const files = await discoverFiles(root);
+  console.log(`Discovered ${files.length} candidate files under ${root}`);
+
+  const stats = { added: 0, skipped: 0, deleted: 0, files_changed: 0, tokens: 0 };
+  const allNew = []; // chunks pending insert across all changed files
+  const filesToReinsert = [];
+
+  for (const f of files) {
+    const chunks = await fileToChunks(f);
+    if (args.filter) {
+      const [k, v] = args.filter.split('=');
+      if (chunks.length === 0 || chunks[0][k] !== v) continue;
+    }
+    const fileSourcePath = chunks[0]?.source_file;
+    if (!fileSourcePath) continue;
+    const newShas = new Set(chunks.map(c => c.sha1));
+    const existingShas = await wv.listShasBySource(client, fileSourcePath);
+    if (setsEqual(newShas, existingShas) && existingShas.size > 0) {
+      stats.skipped++;
+      console.log(`-  ${fileSourcePath}  (unchanged, ${chunks.length} chunks)`);
+      continue;
+    }
+    filesToReinsert.push(fileSourcePath);
+    allNew.push(...chunks);
+    stats.files_changed++;
+    console.log(`✓  ${fileSourcePath}  (${chunks.length} chunks)`);
+  }
+
+  if (allNew.length === 0) {
+    console.log(`Nothing to ingest. Skipped: ${stats.skipped}.`);
+    return;
+  }
+
+  if (args.dryRun) {
+    const totalTokens = allNew.reduce((s, c) => s + c.token_count, 0);
+    console.log(`\n[dry-run] Would embed ${allNew.length} chunks, ~${totalTokens} tokens (~$${(totalTokens / 1e6 * 0.10).toFixed(4)}).`);
+    return;
+  }
+
+  // Embed in batches
+  for (let i = 0; i < allNew.length; i += EMBED_BATCH_SIZE) {
+    const batch = allNew.slice(i, i + EMBED_BATCH_SIZE);
+    const texts = batch.map(c => c.content);
+    const res = await withRetry(() => cohere.embed(texts, 'search_document'), 'cohere.embed');
+    res.embeddings.forEach((vec, j) => { batch[j].vector = vec; });
+    stats.tokens += res.usage.tokens;
+    if (i + EMBED_BATCH_SIZE < allNew.length) await sleep(SLEEP_BETWEEN_BATCHES_MS);
+  }
+
+  // Delete-then-insert per changed file
+  const ingestedAt = new Date().toISOString();
+  for (const sourcePath of filesToReinsert) {
+    await wv.deleteBySource(client, sourcePath);
+  }
+  // Tag all with ingested_at
+  for (const c of allNew) c.ingested_at = ingestedAt;
+  await wv.batchInsert(client, allNew);
+  stats.added = allNew.length;
+
+  // Estimate cost
+  const cost = (stats.tokens / 1e6 * 0.10).toFixed(4);
+  console.log(`\nTotal: ${stats.added} chunks added, ${stats.skipped} skipped, ${stats.files_changed} files changed.`);
+  console.log(`~${stats.tokens} tokens. ~$${cost}`);
+}
+
+main().catch(e => {
+  console.error('ingest failed:', e?.message || e);
+  if (e?.stack) console.error(e.stack);
+  process.exit(1);
+});
+```
+
+- [ ] **Step 2: Smoke ingest the sample corpus (network)**
+
+```bash
+cd proshop_mern && npm run weaviate:up && sleep 2
+cd proshop_mern/rag && node ingest.js --reset --path=tests/fixtures/sample-corpus
+```
+Expected: 4 files processed, ~10–25 chunks added, cost ~$0.001 printed. No errors.
+
+- [ ] **Step 3: Verify idempotency**
+
+```bash
+cd proshop_mern/rag && node ingest.js --path=tests/fixtures/sample-corpus
+```
+Expected: 4 files all marked `(unchanged, N chunks)`, "Nothing to ingest. Skipped: 4."
+
+- [ ] **Step 4: Verify dry-run**
+
+```bash
+cd proshop_mern/rag && node ingest.js --reset --dry-run --path=tests/fixtures/sample-corpus
+```
+Expected: `--reset: dropping ProshopDoc class` then `[dry-run] Would embed N chunks…`. No actual embedding network call (verify by tail-ing logs — no `cohere.embed: retry` messages, runs in <1s).
+
+- [ ] **Step 5: Verify count via Weaviate**
+
+```bash
+cd proshop_mern/rag && node -e "
+import * as wv from './lib/weaviate.js';
+const c = await wv.connect({host:'localhost',httpPort:8080,grpcPort:50051});
+console.log('count:', await wv.countAll(c));
+"
+```
+Expected: count > 0 (matches what step 2 reported as added).
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add proshop_mern/rag/ingest.js
+git commit -m "feat(rag): ingest CLI (idempotent, batched embed, set-equality dedup)"
+```
+
+---
+
+## Chunk 5: Search service + HTTP API
+
+Goal: implement `lib/search.js` and `server.js`. End-to-end working search with HTTP. Spec sections: §9.
+
+### Task 5.1: `lib/search.js` core
+
+**Files:**
+- Create: `proshop_mern/rag/lib/search.js`
+
+- [ ] **Step 1: Implement search core**
+
+Create `rag/lib/search.js`:
+
+```js
+import * as wv from './weaviate.js';
+
+const RETRIEVAL_LIMIT = 25;
+const DEFAULT_TOP_K = 5;
+const MAX_TOP_K = 20;
+
+/**
+ * @param {object} args
+ * @param {object} args.cohere — Cohere client (real or stub)
+ * @param {object} args.weaviateClient
+ * @param {string} args.query
+ * @param {number} [args.topK]
+ * @param {object} [args.filters]   — { doc_type?: string[], source_file?: string }
+ * @param {boolean} [args.rerank]
+ */
+export async function search({ cohere, weaviateClient, query, topK = DEFAULT_TOP_K, filters = {}, rerank = true }) {
+  if (!query || typeof query !== 'string' || !query.trim()) {
+    const err = new Error('query required');
+    err.code = 'QUERY_REQUIRED';
+    throw err;
+  }
+  const clamped = Math.min(Math.max(1, topK | 0), MAX_TOP_K);
+  const top_k_clamped = clamped !== topK;
+
+  const t0 = Date.now();
+
+  // 1. Embed query
+  const embedRes = await cohere.embed([query], 'search_query');
+  const queryVector = embedRes.embeddings[0];
+
+  // 2. Hybrid retrieval
+  const col = weaviateClient.collections.get(wv.CLASS);
+  const filterNode = buildFilters(col, filters);
+  const t1 = Date.now();
+  const hybridRes = await col.query.hybrid(query, {
+    vector: queryVector,
+    alpha: 0.5,
+    fusionType: 'rankedFusion',
+    limit: RETRIEVAL_LIMIT,
+    filters: filterNode,
+    returnMetadata: ['score']
+  });
+  const retrievalMs = Date.now() - t1;
+
+  let candidates = hybridRes.objects.map(o => ({
+    content:      o.properties.content,
+    source_file:  o.properties.source_file,
+    section:      o.properties.section,
+    heading_path: o.properties.heading_path,
+    chunk_index:  o.properties.chunk_index,
+    total_chunks: o.properties.total_chunks,
+    score_hybrid: o.metadata?.score ?? null,
+    score_rerank: null
+  }));
+
+  // 3. Optional rerank
+  let rerankMs = 0;
+  let rerankFailed = false;
+  if (rerank && candidates.length > 0) {
+    const t2 = Date.now();
+    try {
+      const rerankRes = await cohere.rerank(query, candidates.map(c => c.content), clamped);
+      const reordered = rerankRes.results.map(r => ({
+        ...candidates[r.index],
+        score_rerank: r.relevance_score
+      }));
+      candidates = reordered;
+      rerankMs = Date.now() - t2;
+    } catch (_e) {
+      rerankFailed = true;
+      // Graceful degradation: keep hybrid order, slice to clamped
+    }
+  }
+
+  const sliced = candidates.slice(0, clamped);
+  const totalMs = Date.now() - t0;
+
+  return {
+    query,
+    results: sliced,
+    stats: {
+      retrieval_ms: retrievalMs,
+      rerank_ms: rerankMs,
+      total_ms: totalMs,
+      candidates_retrieved: hybridRes.objects.length,
+      candidates_returned: sliced.length,
+      ...(top_k_clamped ? { top_k_clamped: true } : {}),
+      ...(rerankFailed ? { rerank_failed: true } : {})
+    }
+  };
+}
+
+function buildFilters(col, filters) {
+  const clauses = [];
+  if (filters.source_file) {
+    clauses.push(col.filter.byProperty('source_file').equal(filters.source_file));
+  }
+  if (filters.doc_type && Array.isArray(filters.doc_type) && filters.doc_type.length > 0) {
+    const docTypeClauses = filters.doc_type.map(t =>
+      col.filter.byProperty('doc_type').equal(t)
+    );
+    if (docTypeClauses.length === 1) clauses.push(docTypeClauses[0]);
+    else clauses.push(col.filter.any(docTypeClauses));
+  }
+  if (clauses.length === 0) return undefined;
+  if (clauses.length === 1) return clauses[0];
+  return col.filter.all(clauses);
+}
+```
+
+- [ ] **Step 2: Commit (smoke-tested in 5.2)**
+
+```bash
+git add proshop_mern/rag/lib/search.js
+git commit -m "feat(rag): search core (hybrid + optional rerank, graceful degrade)"
+```
+
+---
+
+### Task 5.2: Integration test for `search.js`
+
+**Files:**
+- Create: `proshop_mern/rag/tests/search.test.js`
+
+**Pre-condition:** Weaviate running and sample corpus ingested (`node rag/ingest.js --reset --path=tests/fixtures/sample-corpus`).
+
+- [ ] **Step 1: Write integration tests**
+
+```js
+import { test, before, after } from 'node:test';
+import assert from 'node:assert/strict';
+import 'dotenv/config';
+import * as wv from '../lib/weaviate.js';
+import { createCohereClient } from '../lib/cohere.js';
+import { search } from '../lib/search.js';
+
+let client;
+let cohere;
+
+before(async () => {
+  client = await wv.connect({
+    host: process.env.WEAVIATE_HOST || 'localhost',
+    httpPort: +(process.env.WEAVIATE_HTTP_PORT || 8080),
+    grpcPort: +(process.env.WEAVIATE_GRPC_PORT || 50051)
+  });
+  cohere = createCohereClient({
+    apiKey: process.env.COHERE_API_KEY,
+    embedModel: process.env.COHERE_EMBED_MODEL,
+    rerankModel: process.env.COHERE_RERANK_MODEL
+  });
+});
+
+after(async () => { await client?.close?.(); });
+
+test('search: returns at least 1 result for known query', async () => {
+  const r = await search({ cohere, weaviateClient: client, query: 'how do I rotate the JWT secret', topK: 3 });
+  assert.ok(r.results.length >= 1, 'expected at least 1 result');
+  assert.ok(r.stats.candidates_retrieved >= 1);
+});
+
+test('search: filter by doc_type=incident excludes adr', async () => {
+  const r = await search({
+    cohere, weaviateClient: client,
+    query: 'paypal double charge',
+    filters: { doc_type: ['incident'] },
+    topK: 5
+  });
+  for (const hit of r.results) {
+    assert.ok(hit.source_file.includes('/incidents/'),
+      `expected incident, got ${hit.source_file}`);
+  }
+});
+
+test('search: rerank=false skips rerank phase', async () => {
+  const r = await search({ cohere, weaviateClient: client, query: 'jwt', rerank: false, topK: 3 });
+  for (const hit of r.results) {
+    assert.equal(hit.score_rerank, null);
+  }
+  assert.equal(r.stats.rerank_ms, 0);
+});
+
+test('search: empty query throws QUERY_REQUIRED', async () => {
+  await assert.rejects(
+    () => search({ cohere, weaviateClient: client, query: '' }),
+    (e) => e.code === 'QUERY_REQUIRED'
+  );
+});
+
+test('search: top_k > 20 is clamped', async () => {
+  const r = await search({ cohere, weaviateClient: client, query: 'jwt', topK: 50 });
+  assert.equal(r.stats.top_k_clamped, true);
+  assert.ok(r.results.length <= 20);
+});
+```
+
+- [ ] **Step 2: Run integration tests**
+
+Pre-condition reminder:
+```bash
+cd proshop_mern && npm run weaviate:up && cd rag && node ingest.js --reset --path=tests/fixtures/sample-corpus
+```
+
+Then:
+```bash
+cd proshop_mern/rag && npm run test:integration -- --test-name-pattern=search
+```
+Expected: 5 pass, 0 fail. If "expected incident, got …/adr/…" — sample-corpus is missing the incident copy from Task 4.1 step 1.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add proshop_mern/rag/tests/search.test.js
+git commit -m "test(rag): integration tests for search core"
+```
+
+---
+
+### Task 5.3: HTTP server (`server.js`)
+
+**Files:**
+- Create: `proshop_mern/rag/server.js`
+- Create: `proshop_mern/rag/tests/server.test.js`
+
+- [ ] **Step 1: Implement `server.js`**
+
+```js
+import 'dotenv/config';
+import express from 'express';
+import { spawn } from 'node:child_process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import * as wv from './lib/weaviate.js';
+import { createCohereClient } from './lib/cohere.js';
+import { search } from './lib/search.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PORT = +(process.env.RAG_PORT || 5002);
+const ALLOW_REINDEX = process.env.RAG_ALLOW_REINDEX === 'true';
+
+let weaviateClient;
+let cohere;
+
+const app = express();
+app.use(express.json({ limit: '1mb' }));
+
+app.get('/health', async (req, res) => {
+  try {
+    const count = await wv.countAll(weaviateClient);
+    res.json({ status: 'ok', weaviate: 'connected', chunks_total: count });
+  } catch (e) {
+    res.status(503).json({ status: 'degraded', weaviate: 'disconnected', error: e?.message });
+  }
+});
+
+app.post('/search', async (req, res) => {
+  const { query, top_k, filters, rerank } = req.body || {};
+  try {
+    const result = await search({
+      cohere,
+      weaviateClient,
+      query,
+      topK: typeof top_k === 'number' ? top_k : undefined,
+      filters,
+      rerank: rerank !== false
+    });
+    res.json(result);
+  } catch (e) {
+    if (e.code === 'QUERY_REQUIRED') return res.status(400).json({ error: 'query required' });
+    const status = e?.status || e?.statusCode;
+    if (status === 429) return res.status(429).json({ error: 'embedding rate limit', retry_after: e?.retryAfter || 1 });
+    if (status >= 500 && status < 600) return res.status(502).json({ error: 'embedding upstream error' });
+    if (e?.code === 'ECONNREFUSED' || e?.message?.includes('connect')) return res.status(503).json({ error: 'vector store unavailable' });
+    console.error('/search error:', e);
+    res.status(500).json({ error: 'internal' });
+  }
+});
+
+app.post('/reindex', async (req, res) => {
+  if (!ALLOW_REINDEX) return res.status(403).json({ error: 'reindex disabled' });
+  const { path: filterPath, reset } = req.body || {};
+  const args = [];
+  if (reset) args.push('--reset');
+  if (filterPath) args.push(`--path=${filterPath}`);
+  const cwd = path.resolve(__dirname);
+  const child = spawn(process.execPath, [path.join(cwd, 'ingest.js'), ...args], { cwd });
+  let out = '', err = '';
+  child.stdout.on('data', d => { out += d.toString(); });
+  child.stderr.on('data', d => { err += d.toString(); });
+  child.on('close', (code) => {
+    if (code === 0) res.json({ status: 'ok', stdout: out });
+    else res.status(500).json({ status: 'failed', code, stdout: out, stderr: err });
+  });
+});
+
+async function start() {
+  weaviateClient = await wv.connect({
+    host: process.env.WEAVIATE_HOST || 'localhost',
+    httpPort: +(process.env.WEAVIATE_HTTP_PORT || 8080),
+    grpcPort: +(process.env.WEAVIATE_GRPC_PORT || 50051)
+  });
+  cohere = createCohereClient({
+    apiKey: process.env.COHERE_API_KEY,
+    embedModel: process.env.COHERE_EMBED_MODEL,
+    rerankModel: process.env.COHERE_RERANK_MODEL
+  });
+  await wv.ensureSchema(weaviateClient);
+  app.listen(PORT, () => {
+    console.log(`RAG search server listening on http://localhost:${PORT}`);
+    console.log(`reindex endpoint: ${ALLOW_REINDEX ? 'enabled' : 'disabled (set RAG_ALLOW_REINDEX=true to enable)'}`);
+  });
+}
+
+start().catch(e => { console.error('startup failed:', e); process.exit(1); });
+```
+
+- [ ] **Step 2: Implement HTTP smoke tests**
+
+`rag/tests/server.test.js`:
+
+```js
+import { test, before, after } from 'node:test';
+import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const SERVER_PATH = path.resolve(__dirname, '..', 'server.js');
+const PORT = 5099; // unique port for test to avoid clashing with running dev server
+
+let server;
+const RAG_ENV = { ...process.env, RAG_PORT: String(PORT), RAG_ALLOW_REINDEX: 'false' };
+
+before(async () => {
+  server = spawn(process.execPath, [SERVER_PATH], { env: RAG_ENV, stdio: ['ignore', 'pipe', 'pipe'] });
+  // Wait until "listening" log
+  await new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error('server start timeout')), 10000);
+    server.stdout.on('data', (d) => {
+      if (d.toString().includes('listening')) { clearTimeout(t); resolve(); }
+    });
+    server.stderr.on('data', (d) => process.stderr.write(d));
+  });
+});
+
+after(() => { server?.kill('SIGTERM'); });
+
+const url = (p) => `http://localhost:${PORT}${p}`;
+
+test('GET /health returns 200', async () => {
+  const r = await fetch(url('/health'));
+  assert.equal(r.status, 200);
+  const body = await r.json();
+  assert.equal(body.status, 'ok');
+  assert.equal(body.weaviate, 'connected');
+  assert.equal(typeof body.chunks_total, 'number');
+});
+
+test('POST /search without body → 400', async () => {
+  const r = await fetch(url('/search'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  assert.equal(r.status, 400);
+  const body = await r.json();
+  assert.match(body.error, /query/);
+});
+
+test('POST /reindex with ALLOW=false → 403', async () => {
+  const r = await fetch(url('/reindex'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  assert.equal(r.status, 403);
+});
+
+test('POST /search with valid body → 200, results array', async () => {
+  const r = await fetch(url('/search'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query: 'jwt', top_k: 3 })
+  });
+  assert.equal(r.status, 200);
+  const body = await r.json();
+  assert.ok(Array.isArray(body.results));
+  assert.equal(typeof body.stats.total_ms, 'number');
+});
+```
+
+- [ ] **Step 3: Run server tests**
+
+Pre-condition: Weaviate up + sample corpus ingested (same as Task 5.2).
+
+```bash
+cd proshop_mern/rag && npm run test:integration -- --test-name-pattern=server
+```
+Expected: 4 pass, 0 fail.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add proshop_mern/rag/server.js proshop_mern/rag/tests/server.test.js
+git commit -m "feat(rag): HTTP server (search, reindex, health) + smoke tests"
+```
+
+---
+
+### Task 5.4: Full corpus ingest + acceptance
+
+**Files:** none new — exercises everything end-to-end against real `docs/`.
+
+- [ ] **Step 1: Full ingest of real corpus**
+
+```bash
+cd proshop_mern && npm run weaviate:up
+cd rag && node ingest.js --reset
+```
+Expected: 49 sources processed (48 markdown + 1 JSON), ~150-250 chunks, ~28K tokens, ~$0.003. Per spec §13 acceptance.
+
+- [ ] **Step 2: Start server**
+
+```bash
+cd proshop_mern && RAG_PORT=5002 npm run rag:server &
+sleep 2
+curl -s localhost:5002/health | jq .
+```
+Expected: `{ "status": "ok", "weaviate": "connected", "chunks_total": <N> }`.
+
+- [ ] **Step 3: Run 4 acceptance queries**
+
+```bash
+echo "Q1: jwt rotation" && curl -s localhost:5002/search -H 'Content-Type: application/json' -d '{"query":"how do I rotate the JWT secret","top_k":3}' | jq -r '.results[].source_file'
+echo "Q2: db seed" && curl -s localhost:5002/search -H 'Content-Type: application/json' -d '{"query":"how to seed the database","top_k":3}' | jq -r '.results[].source_file'
+echo "Q3: paypal vs stripe" && curl -s localhost:5002/search -H 'Content-Type: application/json' -d '{"query":"why we picked PayPal over Stripe","top_k":3}' | jq -r '.results[].source_file'
+echo "Q4: paypal incident filtered" && curl -s localhost:5002/search -H 'Content-Type: application/json' -d '{"query":"paypal double charge","top_k":3,"filters":{"doc_type":["incident"]}}' | jq -r '.results[].source_file'
+```
+
+Expected (spec §13):
+- Q1: `docs/incidents/i-003-jwt-secret-leak.md` in top-3.
+- Q2: `docs/runbooks/db-seed-and-reset.md` in top-3.
+- Q3: `docs/adr/adr-004-paypal-vs-stripe.md` in top-3.
+- Q4: `docs/incidents/i-001-paypal-double-charge.md` in top-3, AND no `docs/adr/adr-004-paypal-vs-stripe.md` (filter excludes it).
+
+If a query misses — likely cause is chunking or BM25 weight; rerun with `rerank=false` to isolate which stage degraded.
+
+- [ ] **Step 4: Latency check**
+
+```bash
+for i in {1..11}; do
+  curl -s -w "%{time_total}\n" -o /dev/null localhost:5002/search -H 'Content-Type: application/json' -d '{"query":"jwt","top_k":5}'
+done | tail -10 | sort -n | awk 'NR==5 {print "p50:", $1} NR==10 {print "p95:", $1}'
+```
+Expected: p50 < 0.500 (s), p95 < 1.000. If exceeded — spec §13 latency criterion fails; profile rerank vs hybrid via `stats` in response.
+
+- [ ] **Step 5: Server-down behavior**
+
+```bash
+docker compose stop weaviate
+sleep 2
+curl -s -w "\n%{http_code}\n" localhost:5002/health
+curl -s -w "\n%{http_code}\n" localhost:5002/search -H 'Content-Type: application/json' -d '{"query":"jwt"}'
+docker compose start weaviate
+sleep 5
+```
+Expected: both endpoints return `503` with `vector store unavailable` / `disconnected`.
+
+- [ ] **Step 6: Stop server, full clean run of all tests**
+
+```bash
+kill %1 2>/dev/null || pkill -f "node.*server.js" 2>/dev/null
+cd proshop_mern/rag && npm test
+```
+Expected: all unit + integration tests pass.
+
+- [ ] **Step 7: Final commit + tag**
+
+```bash
+cd proshop_mern && git add -A && git status
+# Verify only expected files are staged. Then:
+git commit -m "feat(rag): pipeline reaches all spec §13 acceptance criteria"
+git tag rag-v0.1
+```
+
+---
+
+## Final acceptance summary
+
+After Task 5.4 step 6 passes, the work matches spec §13:
+- ✅ Weaviate up via `npm run weaviate:up`.
+- ✅ Ingest indexes 48 md + 1 json without errors.
+- ✅ Repeat ingest skips unchanged files.
+- ✅ `/health` 200 with `chunks_total > 0`.
+- ✅ All 4 acceptance queries land the right `source_file` in top-3.
+- ✅ `/reindex` 403 without flag.
+- ✅ `/health`, `/search` return 503 when Weaviate down.
+- ✅ Latency p50 < 500ms, p95 < 1000ms.
+- ✅ All `node --test` green.
+- ✅ Cost ≤ $0.05 (printed in ingest report).
+
+If any criterion fails, follow @superpowers:systematic-debugging — narrow to the failing layer (chunker / embed / hybrid / rerank / HTTP) using the `stats` block as a guide.
