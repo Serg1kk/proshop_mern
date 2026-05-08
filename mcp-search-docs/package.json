@@ -1,0 +1,15 @@
+{
+  "name": "proshop-mcp-search-docs",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "MCP server exposing search over proshop_mern documentation",
+  "main": "server.js",
+  "bin": {
+    "proshop-mcp-search-docs": "server.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "dotenv": "^16.4.5"
+  }
+}
