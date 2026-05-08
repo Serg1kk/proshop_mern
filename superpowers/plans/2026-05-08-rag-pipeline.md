@@ -279,6 +279,13 @@ git commit -m "feat(rag): add weaviate + rag npm scripts"
 **Files:**
 - Create: `proshop_mern/rag/package.json`
 - Create: `proshop_mern/rag/.gitignore`
+- Create: `proshop_mern/rag/tests/.gitkeep` (so `npm test` doesn't fail on missing dir)
+
+**Prerequisite check:** `node --version` must be ≥ 18 (ESM + `node --test` require it). Run before starting:
+```bash
+node --version
+```
+Expected: `v18.x` or higher. If older — install nvm and `nvm install 20`.
 
 - [ ] **Step 1: Verify root `.gitignore` covers `node_modules`**
 
@@ -325,28 +332,42 @@ Content:
 }
 ```
 
-- [ ] **Step 4: Install dependencies**
+- [ ] **Step 4: Create empty `rag/tests/` dir with `.gitkeep`**
+
+```bash
+mkdir -p proshop_mern/rag/tests && touch proshop_mern/rag/tests/.gitkeep
+```
+Expected: file `proshop_mern/rag/tests/.gitkeep` exists.
+
+- [ ] **Step 5: Install dependencies**
 
 ```bash
 cd proshop_mern && npm run rag:install
 ```
 Expected: lockfile created at `rag/package-lock.json`, `rag/node_modules/` populated. No errors. Warnings about peer deps are acceptable.
 
-- [ ] **Step 5: Smoke check imports work**
+- [ ] **Step 6: Smoke check imports work (real exports, not just typeof)**
 
 ```bash
 cd proshop_mern/rag && node -e "
-import('weaviate-client').then(m => console.log('weaviate:', typeof m.default));
-import('cohere-ai').then(m => console.log('cohere:', typeof m.CohereClient));
-import('unified').then(m => console.log('unified:', typeof m.unified));
+const checks = await Promise.all([
+  import('weaviate-client').then(m => typeof m.default?.connectToLocal === 'function'),
+  import('cohere-ai').then(m => typeof m.CohereClient === 'function'),
+  import('unified').then(m => typeof m.unified === 'function'),
+  import('remark-parse').then(m => typeof m.default === 'function'),
+  import('tiktoken').then(m => typeof m.encoding_for_model === 'function')
+]);
+const names = ['weaviate-client.connectToLocal','cohere-ai.CohereClient','unified.unified','remark-parse.default','tiktoken.encoding_for_model'];
+checks.forEach((ok,i) => console.log(ok ? '✓' : '✗', names[i]));
+process.exit(checks.every(Boolean) ? 0 : 1);
 "
 ```
-Expected: 3 lines, none `undefined`. If any `undefined` — version mismatch; pin a known-working minor.
+Expected: 5 ✓ lines, exit code 0. If any ✗ — version mismatch; check that version on npm and pin a working one.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add proshop_mern/rag/package.json proshop_mern/rag/package-lock.json proshop_mern/rag/.gitignore
+git add proshop_mern/rag/package.json proshop_mern/rag/package-lock.json proshop_mern/rag/.gitignore proshop_mern/rag/tests/.gitkeep
 git commit -m "feat(rag): bootstrap rag/ package with deps"
 ```
 
@@ -378,14 +399,7 @@ curl -s -X POST https://api.cohere.com/v2/embed \
 ```
 Expected: JSON containing `"embeddings"` array. If 401/403 — key wrong; ask user to verify. If timeout — check connectivity.
 
-- [ ] **Step 3: Confirm `rag/` scripts run (no-op)**
-
-```bash
-cd proshop_mern && node rag/ingest.js --help 2>&1 | head -5 || true
-```
-Expected: error like `Cannot find module 'rag/ingest.js'` or "is not a directory" — that's fine, this confirms the script entry point doesn't exist yet (will be created in Chunk 4). Move on.
-
-- [ ] **Step 4: Confirm test runner is available**
+- [ ] **Step 3: Confirm test runner is available**
 
 ```bash
 cd proshop_mern/rag && npm test
@@ -396,8 +410,8 @@ Expected: `node --test` outputs "tests 0" or similar (no test files yet) — exi
 
 ## Chunk 1 review checkpoint
 
-After completing Tasks 1.1–1.5, dispatch `plan-document-reviewer` for Chunk 1 sign-off before moving to Chunk 2.
+After completing Tasks 1.1–1.5: Chunk 1 acceptance is met when Weaviate is up, Cohere key probe works, and `npm test --prefix rag` reports "tests 0" exit 0.
 
 ---
 
-(Chunks 2–5 to be added in subsequent iterations.)
+(Chunks 2–5 to be added next.)
