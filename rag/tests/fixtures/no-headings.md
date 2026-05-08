@@ -1,0 +1,5 @@
+This fixture has no headings at all. It is a flat block of text used to verify that the chunker does not crash when no markdown structure is present, and that it produces exactly one chunk with an empty heading_path.
+
+The text continues for several paragraphs to push the token count up to roughly two hundred, which is well above the trivial single-sentence case but still small enough that no splitting is required. Plain prose like this often appears in glossary stubs, brief readme files, and short inline notes that the maintainer never bothered to title. The chunker should treat this content as one logical unit and pass it downstream without any structural metadata beyond the file path itself.
+
+Even without headings, the embedding model receives the full text and can place the chunk in semantic space alongside the rest of the corpus. Retrieval will surface this fixture if the query is a close enough match to its plain content, even though the chunk has no heading path to display in search results. The frontend renders a placeholder section name based on the source filename when heading_path is empty, so the user still sees a meaningful label for the result.

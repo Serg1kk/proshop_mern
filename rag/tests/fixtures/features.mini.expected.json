@@ -1,0 +1,9 @@
+{
+  "chunk_count": 3,
+  "doc_type_for_all": "feature_spec",
+  "chunks": [
+    { "heading_path": ["features", "FF-001"], "content_includes": "Cart persistence" },
+    { "heading_path": ["features", "FF-002"], "content_includes": "Guest checkout" },
+    { "heading_path": ["features", "FF-003"], "content_includes": "PayPal Smart Buttons" }
+  ]
+}

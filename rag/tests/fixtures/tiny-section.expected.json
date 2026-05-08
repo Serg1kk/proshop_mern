@@ -1,0 +1,6 @@
+{
+  "chunk_count": 1,
+  "comment": "All three sections merge: tail merges into 'Real content' (no next), then 'Glossary one-liner' merges into the resulting chunk (no previous of same H1). Final chunk_count is 1.",
+  "heading_path_endsWith_one_of": ["Real content", "Glossary one-liner", "Tiny tail"],
+  "min_token_count": 350
+}

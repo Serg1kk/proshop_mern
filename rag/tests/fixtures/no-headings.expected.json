@@ -1,0 +1,11 @@
+{
+  "chunk_count": 1,
+  "chunks": [
+    {
+      "chunk_index": 0,
+      "total_chunks": 1,
+      "heading_path": [],
+      "content_starts_with": "This fixture has no headings"
+    }
+  ]
+}

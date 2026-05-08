@@ -1,0 +1,25 @@
+{
+  "features": [
+    {
+      "id": "FF-001",
+      "name": "Cart persistence",
+      "status": "enabled",
+      "description": "Cart state persists in localStorage across browser sessions. Items survive page refresh and browser close. Implemented via Redux persist middleware.",
+      "owner": "frontend"
+    },
+    {
+      "id": "FF-002",
+      "name": "Guest checkout",
+      "status": "rollout",
+      "description": "Allow users to complete checkout without creating an account. Email is collected during the shipping step and used for order confirmation. The user is offered an optional account creation at the end.",
+      "owner": "checkout"
+    },
+    {
+      "id": "FF-003",
+      "name": "PayPal Smart Buttons",
+      "status": "disabled",
+      "description": "New PayPal Smart Buttons SDK with one-touch checkout. Currently disabled pending compliance review of refund flow.",
+      "owner": "payments"
+    }
+  ]
+}

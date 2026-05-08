@@ -1,0 +1,19 @@
+{
+  "chunk_count": 2,
+  "chunks": [
+    {
+      "chunk_index": 0,
+      "total_chunks": 2,
+      "heading_path_endsWith": "Authentication",
+      "content_starts_with": "# Simple H2 fixture\n## Authentication\n\nAuthentication is handled via JSON Web Tokens",
+      "content_ends_with": "the middleware checks on every protected request."
+    },
+    {
+      "chunk_index": 1,
+      "total_chunks": 2,
+      "heading_path_endsWith": "Authorization",
+      "content_starts_with": "# Simple H2 fixture\n## Authorization\n\nAuthorization is role-based.",
+      "content_ends_with": "every real authorization decision the application needs to make."
+    }
+  ]
+}

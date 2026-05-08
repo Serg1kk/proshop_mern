@@ -1,0 +1,6 @@
+{
+  "chunk_count": 3,
+  "chunks_have_same_heading_path": ["Large section fixture", "Performance Tuning"],
+  "min_overlap_tokens_between_neighbors": 50,
+  "all_chunks_under_token_limit": 512
+}
