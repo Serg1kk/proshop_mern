@@ -561,6 +561,21 @@ git commit -m "feat(rag): metadata helpers (detectDocType, sha1, buildHeadingPat
 
 Create the 6 fixtures and their `.expected.json` snapshots (see spec §10.2 table).
 
+**Per spec §7.1 step 2 (clarified):** every `##` and `###` is a chunk boundary. For `nested.md` with H3 subsections, expect one chunk per H3 (not per H2).
+
+**Fixture-prose discipline:** placeholders like `[…pad to ~N tokens…]` in this task are **instructions, not literal content**. Replace them with real prose before saving. Verify token counts with:
+
+```bash
+cd proshop_mern/rag && node -e "
+import { encoding_for_model } from 'tiktoken';
+const enc = encoding_for_model('gpt-4');
+const fs = await import('node:fs/promises');
+const text = await fs.readFile(process.argv[1], 'utf8');
+console.log(process.argv[1], 'tokens:', enc.encode(text).length);
+" tests/fixtures/<file>.md
+```
+For each fixture the token count must fall inside the per-fixture range stated in the `.expected.json` (e.g., `tiny-section.md` overall ≥ 400 tokens after merge, `large-section.md` ~1500). If outside — adjust prose length.
+
 **Files:**
 - Create: `proshop_mern/rag/tests/fixtures/simple-h2.md`
 - Create: `proshop_mern/rag/tests/fixtures/simple-h2.expected.json`
@@ -689,7 +704,7 @@ This fixture has no headings at all. It is a flat block of text used to verify t
 }
 ```
 
-- [ ] **Step 5: `nested.md`** — H1 → H2 → H3 (3 levels)
+- [ ] **Step 5: `nested.md`** — H1 → H2 → H3 (3 levels), each H3 ≥ 200 tokens
 
 ```md
 # Deploy
@@ -698,18 +713,18 @@ This fixture has no headings at all. It is a flat block of text used to verify t
 
 ### Buildpacks
 
-Buildpacks transform deployed code into runtime artifacts. Heroku autodetects buildpacks based on files in your repo (e.g., `package.json` → Node.js buildpack). For this project the Node.js buildpack handles both backend and frontend (via `heroku-postbuild` script).
+Buildpacks transform deployed code into runtime artifacts. Heroku autodetects buildpacks based on files in your repo (for example, `package.json` triggers the Node.js buildpack). For this project the Node.js buildpack handles both backend and frontend through the `heroku-postbuild` script defined in the root package.json.
 
-[…~200 tokens about buildpack config…]
+[…replace with ~200 more tokens of plausible prose about buildpack ordering, custom buildpacks, the Procfile, and Heroku's buildpack registry…]
 
 ### Config Vars
 
-Environment variables on Heroku are managed via `heroku config:set KEY=VALUE`. The same vars from `.env` must be set in Heroku's config — `MONGO_URI`, `JWT_SECRET`, `PAYPAL_CLIENT_ID`, `NODE_ENV=production`.
+Environment variables on Heroku are managed via `heroku config:set KEY=VALUE`. The same variables you have in `.env` must be set in Heroku's config dashboard or via the CLI: `MONGO_URI`, `JWT_SECRET`, `PAYPAL_CLIENT_ID`, `NODE_ENV=production`.
 
-[…~200 tokens about config vars…]
+[…replace with ~200 more tokens of plausible prose about config var sources, secret rotation, and the `heroku config` command output…]
 ```
 
-`nested.expected.json`:
+`nested.expected.json` (note: per spec §7.1 H3 is a chunk boundary, so 2 chunks):
 
 ```json
 {
@@ -833,17 +848,14 @@ test('large-section: split into 3 chunks with overlap', async () => {
     assert.ok(c.token_count <= exp.all_chunks_under_token_limit,
       `chunk ${c.chunk_index} has ${c.token_count} tokens, exceeds limit`);
   }
-  // Verify overlap: chunk[i+1].content must contain at least 50 tokens worth
-  // (~200 chars heuristic) of chunk[i].content's tail.
+  // Verify overlap by sentence: at least one full sentence from chunk[i] tail
+  // must appear in chunk[i+1] head. Robust against UTF-8 token-decode noise.
+  const sentences = (text) => text.split(/(?<=[.!?])\s+/).filter(s => s.length > 20);
   for (let i = 0; i < chunks.length - 1; i++) {
-    const tail200 = chunks[i].content.slice(-200);
-    const head400 = chunks[i + 1].content.slice(0, 400);
-    // Find at least one 50-char run from tail in head (loose overlap signal).
-    let found = false;
-    for (let k = 0; k <= tail200.length - 50; k++) {
-      if (head400.includes(tail200.slice(k, k + 50))) { found = true; break; }
-    }
-    assert.ok(found, `chunk ${i}/${i+1}: no detectable overlap`);
+    const tailSentences = sentences(chunks[i].content).slice(-3);
+    const headHalf = chunks[i + 1].content.slice(0, Math.floor(chunks[i + 1].content.length / 2));
+    const overlap = tailSentences.some(s => headHalf.includes(s.slice(0, 40)));
+    assert.ok(overlap, `chunk ${i}/${i+1}: no detectable overlap (tail sentences not in next head)`);
   }
 });
 
@@ -957,6 +969,37 @@ const finalize = (rawContent, headingPath, sourceFile) => {
   };
 };
 
+// Take the last N tokens of `text` as a clean prose suffix (no broken UTF-8).
+// Decoding token-id slices via tiktoken can produce broken bytes at multi-byte
+// boundaries (esp. for Cyrillic), so we anchor on whitespace instead.
+const tailWindow = (text, tokenBudget) => {
+  // Walk back paragraph-by-paragraph until we have ≥ tokenBudget tokens.
+  const paras = text.split(/\n\n+/);
+  let acc = '';
+  let accTokens = 0;
+  for (let i = paras.length - 1; i >= 0; i--) {
+    const p = paras[i];
+    const pTokens = countTokens(p);
+    if (accTokens >= tokenBudget) break;
+    acc = p + (acc ? '\n\n' + acc : '');
+    accTokens += pTokens;
+  }
+  // If still over budget by a lot, trim by sentences (split on .!? then accumulate from end).
+  if (accTokens > tokenBudget * 2) {
+    const sentences = acc.split(/(?<=[.!?])\s+/);
+    let trimmed = '';
+    let trimmedTokens = 0;
+    for (let i = sentences.length - 1; i >= 0; i--) {
+      const s = sentences[i];
+      if (trimmedTokens >= tokenBudget) break;
+      trimmed = s + (trimmed ? ' ' + trimmed : '');
+      trimmedTokens += countTokens(s);
+    }
+    return trimmed;
+  }
+  return acc;
+};
+
 const splitLargeChunk = (rawContent, headingPath, sourceFile) => {
   const prefixTokens = countTokens(buildPrefix(headingPath));
   const budget = TARGET_TOKENS - prefixTokens;
@@ -964,17 +1007,12 @@ const splitLargeChunk = (rawContent, headingPath, sourceFile) => {
   const out = [];
   let buf = '';
   let bufTokens = 0;
-  let prevTail = '';
   for (const p of paragraphs) {
     const pTokens = countTokens(p);
     if (bufTokens + pTokens > budget && buf) {
       out.push(buf.trim());
-      const tailTokens = OVERLAP_TOKENS;
-      const bufTokensArr = enc.encode(buf);
-      const tailIdsCount = Math.min(tailTokens, bufTokensArr.length);
-      const tailIds = bufTokensArr.slice(-tailIdsCount);
-      prevTail = new TextDecoder().decode(enc.decode(tailIds));
-      buf = prevTail + '\n\n' + p;
+      const tail = tailWindow(buf, OVERLAP_TOKENS);
+      buf = tail + '\n\n' + p;
       bufTokens = countTokens(buf);
     } else {
       buf = buf ? buf + '\n\n' + p : p;
