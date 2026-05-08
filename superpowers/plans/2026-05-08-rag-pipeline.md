@@ -314,9 +314,9 @@ Content:
   "type": "module",
   "description": "RAG pipeline (ingest + search) for proshop_mern docs/",
   "scripts": {
-    "test": "node --test tests/",
+    "test": "node --test --test-concurrency=1 tests/",
     "test:unit": "node --test tests/metadata.test.js tests/chunker.test.js",
-    "test:integration": "node --test tests/search.test.js tests/server.test.js"
+    "test:integration": "node --test --test-concurrency=1 tests/search.test.js tests/server.test.js"
   },
   "dependencies": {
     "weaviate-client": "^3.2.0",
@@ -1596,10 +1596,15 @@ Create `rag/ingest.js`:
 import 'dotenv/config';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { glob } from 'glob';
 import * as wv from './lib/weaviate.js';
 import { createCohereClient } from './lib/cohere.js';
 import { chunkMarkdown, chunkFeaturesJson } from './lib/chunker.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = path.resolve(__dirname, '..');  // proshop_mern/
+const DEFAULT_DOCS = path.join(REPO_ROOT, 'docs');
 
 const EMBED_BATCH_SIZE = 96;
 const SLEEP_BETWEEN_BATCHES_MS = 50;
@@ -1613,7 +1618,13 @@ const parseArgs = (argv) => {
     if (a.startsWith('--path=')) args.path = a.slice(7);
     else if (a === '--dry-run') args.dryRun = true;
     else if (a === '--reset') args.reset = true;
-    else if (a.startsWith('--filter=')) args.filter = a.slice(9);
+    else if (a.startsWith('--filter=')) {
+      // First `=` separates key and value; values themselves may contain `=`.
+      const raw = a.slice(9);
+      const eqIdx = raw.indexOf('=');
+      if (eqIdx === -1) { console.error('--filter requires key=value, e.g. --filter=doc_type=runbook'); process.exit(2); }
+      args.filter = { key: raw.slice(0, eqIdx), value: raw.slice(eqIdx + 1) };
+    }
     else if (a === '--help' || a === '-h') { printHelp(); process.exit(0); }
     else { console.error(`unknown arg: ${a}`); process.exit(2); }
   }
@@ -1637,10 +1648,9 @@ const discoverFiles = async (root) => {
 };
 
 const relPath = (absPath) => {
-  // Compute path relative to repo root (proshop_mern/) for stable source_file in metadata.
-  const cwd = process.cwd();
-  const repoRoot = cwd.endsWith('/rag') ? path.resolve(cwd, '..') : cwd;
-  return path.relative(repoRoot, absPath).replaceAll('\\', '/');
+  // Compute path relative to proshop_mern/ for stable source_file in metadata,
+  // independent of the cwd from which ingest.js was invoked.
+  return path.relative(REPO_ROOT, absPath).replaceAll('\\', '/');
 };
 
 const fileToChunks = async (absPath) => {
@@ -1698,7 +1708,10 @@ async function main() {
   }
   await wv.ensureSchema(client);
 
-  const root = args.path || path.resolve(process.cwd(), '../docs');
+  // --path may be relative to cwd; absolutize for downstream stability.
+  const root = args.path
+    ? path.resolve(process.cwd(), args.path)
+    : DEFAULT_DOCS;
   const files = await discoverFiles(root);
   console.log(`Discovered ${files.length} candidate files under ${root}`);
 
@@ -1709,8 +1722,9 @@ async function main() {
   for (const f of files) {
     const chunks = await fileToChunks(f);
     if (args.filter) {
-      const [k, v] = args.filter.split('=');
-      if (chunks.length === 0 || chunks[0][k] !== v) continue;
+      const { key, value } = args.filter;
+      // All chunks of a file share doc_type/source_file etc. — chunk[0] is representative.
+      if (chunks.length === 0 || chunks[0][key] !== value) continue;
     }
     const fileSourcePath = chunks[0]?.source_file;
     if (!fileSourcePath) continue;
@@ -2249,22 +2263,31 @@ curl -s localhost:5002/health | jq .
 ```
 Expected: `{ "status": "ok", "weaviate": "connected", "chunks_total": <N> }`.
 
-- [ ] **Step 3: Run 4 acceptance queries**
+- [ ] **Step 3: Run 4 acceptance queries with programmatic assertions**
 
 ```bash
-echo "Q1: jwt rotation" && curl -s localhost:5002/search -H 'Content-Type: application/json' -d '{"query":"how do I rotate the JWT secret","top_k":3}' | jq -r '.results[].source_file'
-echo "Q2: db seed" && curl -s localhost:5002/search -H 'Content-Type: application/json' -d '{"query":"how to seed the database","top_k":3}' | jq -r '.results[].source_file'
-echo "Q3: paypal vs stripe" && curl -s localhost:5002/search -H 'Content-Type: application/json' -d '{"query":"why we picked PayPal over Stripe","top_k":3}' | jq -r '.results[].source_file'
-echo "Q4: paypal incident filtered" && curl -s localhost:5002/search -H 'Content-Type: application/json' -d '{"query":"paypal double charge","top_k":3,"filters":{"doc_type":["incident"]}}' | jq -r '.results[].source_file'
+set -e
+SOURCES=$(curl -s localhost:5002/search -H 'Content-Type: application/json' -d '{"query":"how do I rotate the JWT secret","top_k":3}' | jq -r '.results[].source_file')
+echo "Q1: $SOURCES"
+echo "$SOURCES" | grep -q 'i-003-jwt-secret-leak' || { echo "FAIL Q1"; exit 1; }
+
+SOURCES=$(curl -s localhost:5002/search -H 'Content-Type: application/json' -d '{"query":"how to seed the database","top_k":3}' | jq -r '.results[].source_file')
+echo "Q2: $SOURCES"
+echo "$SOURCES" | grep -q 'db-seed-and-reset' || { echo "FAIL Q2"; exit 1; }
+
+SOURCES=$(curl -s localhost:5002/search -H 'Content-Type: application/json' -d '{"query":"why we picked PayPal over Stripe","top_k":3}' | jq -r '.results[].source_file')
+echo "Q3: $SOURCES"
+echo "$SOURCES" | grep -q 'adr-004-paypal-vs-stripe' || { echo "FAIL Q3"; exit 1; }
+
+SOURCES=$(curl -s localhost:5002/search -H 'Content-Type: application/json' -d '{"query":"paypal double charge","top_k":3,"filters":{"doc_type":["incident"]}}' | jq -r '.results[].source_file')
+echo "Q4: $SOURCES"
+echo "$SOURCES" | grep -q 'i-001-paypal-double-charge' || { echo "FAIL Q4 (missing target)"; exit 1; }
+echo "$SOURCES" | grep -qv 'adr-004-paypal-vs-stripe' || { echo "FAIL Q4 (filter leaked adr)"; exit 1; }
+
+echo "ALL ACCEPTANCE QUERIES PASS"
 ```
 
-Expected (spec §13):
-- Q1: `docs/incidents/i-003-jwt-secret-leak.md` in top-3.
-- Q2: `docs/runbooks/db-seed-and-reset.md` in top-3.
-- Q3: `docs/adr/adr-004-paypal-vs-stripe.md` in top-3.
-- Q4: `docs/incidents/i-001-paypal-double-charge.md` in top-3, AND no `docs/adr/adr-004-paypal-vs-stripe.md` (filter excludes it).
-
-If a query misses — likely cause is chunking or BM25 weight; rerun with `rerank=false` to isolate which stage degraded.
+Expected (spec §13): final line `ALL ACCEPTANCE QUERIES PASS`. If any FAIL — most likely cause is chunking or BM25 weight; rerun with `rerank=false` in body to isolate which stage degraded.
 
 - [ ] **Step 4: Latency check**
 
@@ -2275,9 +2298,12 @@ done | tail -10 | sort -n | awk 'NR==5 {print "p50:", $1} NR==10 {print "p95:", 
 ```
 Expected: p50 < 0.500 (s), p95 < 1.000. If exceeded — spec §13 latency criterion fails; profile rerank vs hybrid via `stats` in response.
 
-- [ ] **Step 5: Server-down behavior**
+- [ ] **Step 5: Server-down behavior (with caveat on startup)**
+
+**Caveat (known limitation, documented):** `server.js` calls `wv.connect` + `wv.ensureSchema` BEFORE `app.listen`. So if Weaviate is down at startup time, the process exits and the server never binds. The 503 contract holds only for Weaviate going down WHILE the server is already running. This is acceptable for v0.1; future hardening: lazy-connect on first request.
 
 ```bash
+# Server is already running from Step 2.
 docker compose stop weaviate
 sleep 2
 curl -s -w "\n%{http_code}\n" localhost:5002/health
@@ -2290,10 +2316,11 @@ Expected: both endpoints return `503` with `vector store unavailable` / `disconn
 - [ ] **Step 6: Stop server, full clean run of all tests**
 
 ```bash
-kill %1 2>/dev/null || pkill -f "node.*server.js" 2>/dev/null
+pkill -f "node.*server.js" 2>/dev/null
+sleep 1
 cd proshop_mern/rag && npm test
 ```
-Expected: all unit + integration tests pass.
+Expected: all unit + integration tests pass. (`--test-concurrency=1` ensures search.test and server.test don't race on Weaviate.)
 
 - [ ] **Step 7: Final commit + tag**
 
