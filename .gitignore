@@ -24,3 +24,8 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .vscode/settings.json
+
+# python (mcp server venv)
+mcp/.venv/
+mcp/__pycache__/
+mcp/**/__pycache__/

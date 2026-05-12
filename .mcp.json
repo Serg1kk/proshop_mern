@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "feature-flags": {
+      "type": "stdio",
+      "command": "mcp/.venv/bin/python",
+      "args": ["mcp/feature_flags_server.py"]
+    },
+    "search-docs": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["mcp-search-docs/server.js"]
+    }
+  }
+}

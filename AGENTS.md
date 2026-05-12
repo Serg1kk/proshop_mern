@@ -130,3 +130,55 @@ After making changes, verify the smallest relevant slice:
 
 Get the app running locally → reproduce the issue → patch the narrowest
 possible layer → manually verify → commit with a conventional message.
+
+
+## Поиск по документации продукта proshop_mern (search-docs MCP)
+   - При любых вопросах про функционал, фичи, архитектуру, ADR,
+     runbooks, incidents — СНАЧАЛА использовать search_project_docs MCP.
+   - Это быстрее и возвращает релевантные чанки с метаданными.
+   - ТОЛЬКО если vector search не дал нужных результатов или нужно
+     полное содержимое файла из метаданных найденного чанка →
+     fallback на grep+read.
+   - НЕ начинать с grep+read по проекту — медленно и дорого по
+     токенам.
+
+## Управление feature flags (feature-flags MCP)
+   - Когда пользователь спрашивает статус фичи ("какой статус у
+     gift_message?", "включена ли search_v2?") — вызывать
+     feature-flags MCP get_feature_info, не читать features.json
+     напрямую.
+   - Когда пользователь хочет изменить статус ("включи фичу X",
+     "переведи Y в Testing", "поставь трафик 25%") — вызывать
+     соответствующие tools (set_feature_state, adjust_traffic_rollout).
+     Никогда не редактировать backend/features.json вручную через
+     Edit/Write.
+   - Когда пользователь просит список всех фич — использовать
+     list_features tool (если он есть), не grep'ать файл.
+
+
+     Обнови мой rules-файл проекта (CLAUDE.md / AGENTS.md / .cursor/rules/
+*.mdc — выбери правильный для моей IDE) — добавь две секции про
+работу с MCP:
+
+## Поиск по документации продукта proshop_mern (search-docs MCP)
+   - При любых вопросах про функционал, фичи, архитектуру, ADR,
+     runbooks, incidents — СНАЧАЛА использовать search_project_docs MCP.
+   - Это быстрее и возвращает релевантные чанки с метаданными.
+   - ТОЛЬКО если vector search не дал нужных результатов или нужно
+     полное содержимое файла из метаданных найденного чанка →
+     fallback на grep+read.
+   - НЕ начинать с grep+read по проекту — медленно и дорого по
+     токенам.
+
+## Управление feature flags (feature-flags MCP)
+   - Когда пользователь спрашивает статус фичи ("какой статус у
+     gift_message?", "включена ли search_v2?") — вызывать
+     feature-flags MCP get_feature_info, не читать features.json
+     напрямую.
+   - Когда пользователь хочет изменить статус ("включи фичу X",
+     "переведи Y в Testing", "поставь трафик 25%") — вызывать
+     соответствующие tools (set_feature_state, adjust_traffic_rollout).
+     Никогда не редактировать backend/features.json вручную через
+     Edit/Write.
+   - Когда пользователь просит список всех фич — использовать
+     list_features tool (если он есть), не grep'ать файл.
