@@ -1,18 +1,33 @@
 import React, { useState } from 'react'
-import { Form, Button } from 'react-bootstrap'
 import { useDispatch, useSelector } from 'react-redux'
-import FormContainer from '../components/FormContainer'
-import CheckoutSteps from '../components/CheckoutSteps'
+import PageShell from '../components/good-shop/PageShell'
+import FormShell from '../components/good-shop/FormShell'
+import CheckoutProgress from '../components/good-shop/CheckoutProgress'
+import Field from '../components/good-shop/Field'
+import Button from '../components/good-shop/Button'
 import { saveShippingAddress } from '../actions/cartActions'
 
-const ShippingScreen = ({ history }) => {
-  const cart = useSelector((state) => state.cart)
-  const { shippingAddress } = cart
+const COUNTRIES = [
+  'United States',
+  'Canada',
+  'United Kingdom',
+  'Germany',
+  'France',
+  'Spain',
+  'Italy',
+  'Netherlands',
+  'Sweden',
+  'Australia',
+]
 
-  const [address, setAddress] = useState(shippingAddress.address)
-  const [city, setCity] = useState(shippingAddress.city)
-  const [postalCode, setPostalCode] = useState(shippingAddress.postalCode)
-  const [country, setCountry] = useState(shippingAddress.country)
+const ShippingScreen = ({ history }) => {
+  const cart = useSelector((s) => s.cart)
+  const { shippingAddress = {} } = cart
+
+  const [address, setAddress] = useState(shippingAddress.address || '')
+  const [city, setCity] = useState(shippingAddress.city || '')
+  const [postalCode, setPostalCode] = useState(shippingAddress.postalCode || '')
+  const [country, setCountry] = useState(shippingAddress.country || 'United States')
 
   const dispatch = useDispatch()
 
@@ -23,59 +38,56 @@ const ShippingScreen = ({ history }) => {
   }
 
   return (
-    <FormContainer>
-      <CheckoutSteps step1 step2 />
-      <h1>Shipping</h1>
-      <Form onSubmit={submitHandler}>
-        <Form.Group controlId='address'>
-          <Form.Label>Address</Form.Label>
-          <Form.Control
-            type='text'
-            placeholder='Enter address'
-            value={address}
-            required
-            onChange={(e) => setAddress(e.target.value)}
-          ></Form.Control>
-        </Form.Group>
-
-        <Form.Group controlId='city'>
-          <Form.Label>City</Form.Label>
-          <Form.Control
-            type='text'
-            placeholder='Enter city'
-            value={city}
-            required
-            onChange={(e) => setCity(e.target.value)}
-          ></Form.Control>
-        </Form.Group>
-
-        <Form.Group controlId='postalCode'>
-          <Form.Label>Postal Code</Form.Label>
-          <Form.Control
-            type='text'
-            placeholder='Enter postal code'
-            value={postalCode}
-            required
-            onChange={(e) => setPostalCode(e.target.value)}
-          ></Form.Control>
-        </Form.Group>
-
-        <Form.Group controlId='country'>
-          <Form.Label>Country</Form.Label>
-          <Form.Control
-            type='text'
-            placeholder='Enter country'
-            value={country}
-            required
-            onChange={(e) => setCountry(e.target.value)}
-          ></Form.Control>
-        </Form.Group>
-
-        <Button type='submit' variant='primary'>
-          Continue
-        </Button>
-      </Form>
-    </FormContainer>
+    <PageShell>
+      <CheckoutProgress current={2} />
+      <FormShell title='Where should we send it?' subtitle='We deliver to physical addresses only.'>
+        <form onSubmit={submitHandler}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+            <Field
+              label='Street address'
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              placeholder='123 Main St, Apt 4B'
+              autoComplete='street-address'
+              required
+            />
+            <div className='form-grid is-3col'>
+              <Field
+                label='City'
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                autoComplete='address-level2'
+                required
+              />
+              <Field
+                label='Postal code'
+                value={postalCode}
+                onChange={(e) => setPostalCode(e.target.value)}
+                autoComplete='postal-code'
+                required
+              />
+              <Field
+                as='select'
+                label='Country'
+                value={country}
+                onChange={(e) => setCountry(e.target.value)}
+                autoComplete='country-name'
+                required
+              >
+                {COUNTRIES.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </Field>
+            </div>
+          </div>
+          <div style={{ marginTop: 'var(--space-5)' }}>
+            <Button type='submit' variant='primary' size='lg' block>
+              Continue to payment
+            </Button>
+          </div>
+        </form>
+      </FormShell>
+    </PageShell>
   )
 }
 

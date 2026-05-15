@@ -1,44 +1,54 @@
 import React, { useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Button, Row, Col, ListGroup, Image, Card } from 'react-bootstrap'
 import { useDispatch, useSelector } from 'react-redux'
-import Message from '../components/Message'
-import CheckoutSteps from '../components/CheckoutSteps'
+import PageShell from '../components/good-shop/PageShell'
+import CheckoutProgress from '../components/good-shop/CheckoutProgress'
+import Button from '../components/good-shop/Button'
+import Alert from '../components/good-shop/Alert'
+import EmptyState from '../components/good-shop/EmptyState'
+import PriceLockup from '../components/good-shop/PriceLockup'
+import Placeholder from '../components/good-shop/Placeholder'
 import { createOrder } from '../actions/orderActions'
 import { ORDER_CREATE_RESET } from '../constants/orderConstants'
 import { USER_DETAILS_RESET } from '../constants/userConstants'
 
+const addDecimals = (num) => (Math.round(num * 100) / 100).toFixed(2)
+
+const tintFor = (key = '') => {
+  const TINTS = ['rose', 'violet', 'sky', 'mint', 'amber', 'slate', 'indigo', 'coral']
+  let h = 0
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0
+  return TINTS[h % TINTS.length]
+}
+
 const PlaceOrderScreen = ({ history }) => {
   const dispatch = useDispatch()
-
-  const cart = useSelector((state) => state.cart)
-
-  if (!cart.shippingAddress.address) {
-    history.push('/shipping')
-  } else if (!cart.paymentMethod) {
-    history.push('/payment')
-  }
-  //   Calculate prices
-  const addDecimals = (num) => {
-    return (Math.round(num * 100) / 100).toFixed(2)
-  }
-
-  cart.itemsPrice = addDecimals(
-    cart.cartItems.reduce((acc, item) => acc + item.price * item.qty, 0)
-  )
-  cart.shippingPrice = addDecimals(cart.itemsPrice > 100 ? 0 : 100)
-  cart.taxPrice = addDecimals(Number((0.15 * cart.itemsPrice).toFixed(2)))
-  cart.totalPrice = (
-    Number(cart.itemsPrice) +
-    Number(cart.shippingPrice) +
-    Number(cart.taxPrice)
-  ).toFixed(2)
-
-  const orderCreate = useSelector((state) => state.orderCreate)
-  const { order, success, error } = orderCreate
+  const cart = useSelector((s) => s.cart)
 
   useEffect(() => {
-    if (success) {
+    if (!cart.shippingAddress?.address) history.push('/shipping')
+    else if (!cart.paymentMethod) history.push('/payment')
+  }, [history, cart.shippingAddress, cart.paymentMethod])
+
+  const itemsPrice = addDecimals(
+    cart.cartItems.reduce((acc, it) => acc + Number(it.price) * Number(it.qty), 0)
+  )
+  const shippingPrice = addDecimals(Number(itemsPrice) > 100 ? 0 : 100)
+  const taxPrice = addDecimals(Number((0.15 * Number(itemsPrice)).toFixed(2)))
+  const totalPrice = (
+    Number(itemsPrice) + Number(shippingPrice) + Number(taxPrice)
+  ).toFixed(2)
+
+  cart.itemsPrice = itemsPrice
+  cart.shippingPrice = shippingPrice
+  cart.taxPrice = taxPrice
+  cart.totalPrice = totalPrice
+
+  const orderCreate = useSelector((s) => s.orderCreate)
+  const { order, success, error, loading } = orderCreate
+
+  useEffect(() => {
+    if (success && order) {
       history.push(`/order/${order._id}`)
       dispatch({ type: USER_DETAILS_RESET })
       dispatch({ type: ORDER_CREATE_RESET })
@@ -52,117 +62,111 @@ const PlaceOrderScreen = ({ history }) => {
         orderItems: cart.cartItems,
         shippingAddress: cart.shippingAddress,
         paymentMethod: cart.paymentMethod,
-        itemsPrice: cart.itemsPrice,
-        shippingPrice: cart.shippingPrice,
-        taxPrice: cart.taxPrice,
-        totalPrice: cart.totalPrice,
+        itemsPrice,
+        shippingPrice,
+        taxPrice,
+        totalPrice,
       })
     )
   }
 
   return (
-    <>
-      <CheckoutSteps step1 step2 step3 step4 />
-      <Row>
-        <Col md={8}>
-          <ListGroup variant='flush'>
-            <ListGroup.Item>
-              <h2>Shipping</h2>
-              <p>
-                <strong>Address:</strong>
-                {cart.shippingAddress.address}, {cart.shippingAddress.city}{' '}
-                {cart.shippingAddress.postalCode},{' '}
-                {cart.shippingAddress.country}
-              </p>
-            </ListGroup.Item>
+    <PageShell>
+      <CheckoutProgress current={4} />
 
-            <ListGroup.Item>
-              <h2>Payment Method</h2>
-              <strong>Method: </strong>
-              {cart.paymentMethod}
-            </ListGroup.Item>
+      <div className='cart-grid'>
+        <section>
+          <article className='review-block'>
+            <div className='review-block-head'>
+              <h4>Shipping to</h4>
+              <Link to='/shipping' className='edit-link'>Change</Link>
+            </div>
+            <div className='review-body'>
+              <strong>{cart.shippingAddress.address}</strong>, {cart.shippingAddress.city}{' '}
+              {cart.shippingAddress.postalCode}, {cart.shippingAddress.country}
+            </div>
+          </article>
 
-            <ListGroup.Item>
-              <h2>Order Items</h2>
-              {cart.cartItems.length === 0 ? (
-                <Message>Your cart is empty</Message>
-              ) : (
-                <ListGroup variant='flush'>
-                  {cart.cartItems.map((item, index) => (
-                    <ListGroup.Item key={index}>
-                      <Row>
-                        <Col md={1}>
-                          <Image
-                            src={item.image}
-                            alt={item.name}
-                            fluid
-                            rounded
-                          />
-                        </Col>
-                        <Col>
-                          <Link to={`/product/${item.product}`}>
-                            {item.name}
-                          </Link>
-                        </Col>
-                        <Col md={4}>
-                          {item.qty} x ${item.price} = ${item.qty * item.price}
-                        </Col>
-                      </Row>
-                    </ListGroup.Item>
-                  ))}
-                </ListGroup>
-              )}
-            </ListGroup.Item>
-          </ListGroup>
-        </Col>
-        <Col md={4}>
-          <Card>
-            <ListGroup variant='flush'>
-              <ListGroup.Item>
-                <h2>Order Summary</h2>
-              </ListGroup.Item>
-              <ListGroup.Item>
-                <Row>
-                  <Col>Items</Col>
-                  <Col>${cart.itemsPrice}</Col>
-                </Row>
-              </ListGroup.Item>
-              <ListGroup.Item>
-                <Row>
-                  <Col>Shipping</Col>
-                  <Col>${cart.shippingPrice}</Col>
-                </Row>
-              </ListGroup.Item>
-              <ListGroup.Item>
-                <Row>
-                  <Col>Tax</Col>
-                  <Col>${cart.taxPrice}</Col>
-                </Row>
-              </ListGroup.Item>
-              <ListGroup.Item>
-                <Row>
-                  <Col>Total</Col>
-                  <Col>${cart.totalPrice}</Col>
-                </Row>
-              </ListGroup.Item>
-              <ListGroup.Item>
-                {error && <Message variant='danger'>{error}</Message>}
-              </ListGroup.Item>
-              <ListGroup.Item>
-                <Button
-                  type='button'
-                  className='btn-block'
-                  disabled={cart.cartItems === 0}
-                  onClick={placeOrderHandler}
-                >
-                  Place Order
-                </Button>
-              </ListGroup.Item>
-            </ListGroup>
-          </Card>
-        </Col>
-      </Row>
-    </>
+          <article className='review-block'>
+            <div className='review-block-head'>
+              <h4>Paying with</h4>
+              <Link to='/payment' className='edit-link'>Change</Link>
+            </div>
+            <div className='review-body'>{cart.paymentMethod}</div>
+          </article>
+
+          <article className='review-block'>
+            <div className='review-block-head'>
+              <h4>You're ordering · {cart.cartItems.length} item{cart.cartItems.length === 1 ? '' : 's'}</h4>
+              <Link to='/cart' className='edit-link'>Edit cart</Link>
+            </div>
+            {cart.cartItems.length === 0 ? (
+              <EmptyState title='Your cart is empty.' />
+            ) : (
+              <div>
+                {cart.cartItems.map((item, i) => (
+                  <div key={i} className='item-line'>
+                    <Placeholder
+                      tint={tintFor(item.name || item.product)}
+                      label={item.name}
+                      src={item.image}
+                      alt={item.name}
+                    />
+                    <div>
+                      <Link to={`/product/${item.product}`} className='title-link'>{item.name}</Link>
+                      <div className='qty'>{item.qty} × <PriceLockup amount={Number(item.price)} currency='USD' /></div>
+                    </div>
+                    <PriceLockup amount={Number(item.qty) * Number(item.price)} currency='USD' />
+                  </div>
+                ))}
+              </div>
+            )}
+          </article>
+        </section>
+
+        <aside className='aurora-border is-subtle' style={{ borderRadius: 'var(--radius-lg)' }}>
+          <div className='order-summary'>
+            <h3>Order summary</h3>
+            <div className='row'>
+              <span>Items</span>
+              <PriceLockup amount={Number(itemsPrice)} currency='USD' />
+            </div>
+            <div className='row'>
+              <span>Shipping</span>
+              <span>
+                {Number(shippingPrice) === 0 ? 'Free' : <PriceLockup amount={Number(shippingPrice)} currency='USD' />}
+              </span>
+            </div>
+            <div className='row'>
+              <span>Tax</span>
+              <PriceLockup amount={Number(taxPrice)} currency='USD' />
+            </div>
+            <div className='row is-total'>
+              <span>Total</span>
+              <PriceLockup amount={Number(totalPrice)} currency='USD' size='lg' />
+            </div>
+
+            {error && (
+              <div style={{ marginTop: 'var(--space-2)' }}>
+                <Alert variant='destructive'>{error}</Alert>
+              </div>
+            )}
+
+            <Button
+              variant='primary'
+              size='lg'
+              block
+              disabled={cart.cartItems.length === 0}
+              loading={loading}
+              onClick={placeOrderHandler}
+            >
+              Place order
+            </Button>
+            <span className='hint'>Shipping and taxes are estimated.</span>
+          </div>
+        </aside>
+      </div>
+    </PageShell>
   )
 }
 

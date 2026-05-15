@@ -1,3 +1,7 @@
+@import './styles/tokens.css';
+@import './styles/base.css';
+@import './styles/components.css';
+
 main {
   min-height: 80vh;
 }
@@ -20,7 +24,7 @@ h2 {
   margin: 0.1rem;
 }
 
-/* carousel */
+/* carousel (legacy Bootstrap pages) */
 .carousel-item-next,
 .carousel-item-prev,
 .carousel-item.active {
@@ -51,3 +55,9 @@ h2 {
     font-size: 2.5vw;
   }
 }
+
+/* Reset typography overrides inside Good Shop tree so the design system wins. */
+.gs-root h1, .gs-root h2, .gs-root h3 { padding: 0; }
+.gs-root h1 { font-size: 48px; }
+.gs-root h2 { font-size: 32px; }
+.gs-root h3 { font-size: 24px; }

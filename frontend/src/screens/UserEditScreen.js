@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
-import { Form, Button } from 'react-bootstrap'
+import React, { useEffect, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
-import Message from '../components/Message'
-import Loader from '../components/Loader'
-import FormContainer from '../components/FormContainer'
+import PageShell from '../components/good-shop/PageShell'
+import Breadcrumb from '../components/good-shop/Breadcrumb'
+import FormShell from '../components/good-shop/FormShell'
+import Field from '../components/good-shop/Field'
+import Toggle from '../components/good-shop/Toggle'
+import Button from '../components/good-shop/Button'
+import Alert from '../components/good-shop/Alert'
 import { getUserDetails, updateUser } from '../actions/userActions'
 import { USER_UPDATE_RESET } from '../constants/userConstants'
 
@@ -16,11 +18,9 @@ const UserEditScreen = ({ match, history }) => {
   const [isAdmin, setIsAdmin] = useState(false)
 
   const dispatch = useDispatch()
-
-  const userDetails = useSelector((state) => state.userDetails)
+  const userDetails = useSelector((s) => s.userDetails)
   const { loading, error, user } = userDetails
-
-  const userUpdate = useSelector((state) => state.userUpdate)
+  const userUpdate = useSelector((s) => s.userUpdate)
   const {
     loading: loadingUpdate,
     error: errorUpdate,
@@ -48,56 +48,52 @@ const UserEditScreen = ({ match, history }) => {
   }
 
   return (
-    <>
-      <Link to='/admin/userlist' className='btn btn-light my-3'>
-        Go Back
-      </Link>
-      <FormContainer>
-        <h1>Edit User</h1>
-        {loadingUpdate && <Loader />}
-        {errorUpdate && <Message variant='danger'>{errorUpdate}</Message>}
-        {loading ? (
-          <Loader />
-        ) : error ? (
-          <Message variant='danger'>{error}</Message>
-        ) : (
-          <Form onSubmit={submitHandler}>
-            <Form.Group controlId='name'>
-              <Form.Label>Name</Form.Label>
-              <Form.Control
-                type='name'
-                placeholder='Enter name'
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              ></Form.Control>
-            </Form.Group>
-
-            <Form.Group controlId='email'>
-              <Form.Label>Email Address</Form.Label>
-              <Form.Control
-                type='email'
-                placeholder='Enter email'
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              ></Form.Control>
-            </Form.Group>
-
-            <Form.Group controlId='isadmin'>
-              <Form.Check
-                type='checkbox'
-                label='Is Admin'
-                checked={isAdmin}
-                onChange={(e) => setIsAdmin(e.target.checked)}
-              ></Form.Check>
-            </Form.Group>
-
-            <Button type='submit' variant='primary'>
-              Update
-            </Button>
-          </Form>
-        )}
-      </FormContainer>
-    </>
+    <PageShell>
+      <Breadcrumb
+        items={[
+          { label: 'Admin', to: '/admin/productlist' },
+          { label: 'Users', to: '/admin/userlist' },
+          { label: user?.name || 'Edit user' },
+        ]}
+      />
+      <FormShell title='Edit user' subtitle={user?.email}>
+        <div className='aurora-border is-subtle' style={{ borderRadius: 'var(--radius-lg)', padding: 'var(--space-5)' }}>
+          {(error || errorUpdate) && (
+            <div style={{ marginBottom: 'var(--space-3)' }}>
+              <Alert variant='destructive'>{error || errorUpdate}</Alert>
+            </div>
+          )}
+          {loading ? (
+            <div className='gs-loader'>Loading…</div>
+          ) : (
+            <form onSubmit={submitHandler}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+                <Field label='Name' value={name} onChange={(e) => setName(e.target.value)} required />
+                <Field
+                  label='Email address'
+                  type='email'
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                />
+              </div>
+              <div style={{ marginTop: 'var(--space-4)', borderTop: '1px solid var(--border-subtle)', paddingTop: 'var(--space-3)' }}>
+                <Toggle
+                  checked={isAdmin}
+                  onChange={setIsAdmin}
+                  label='Administrator privileges'
+                  hint='Can manage products, orders and other users.'
+                />
+              </div>
+              <div style={{ marginTop: 'var(--space-4)', display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end' }}>
+                <Button to='/admin/userlist' variant='ghost'>Cancel</Button>
+                <Button type='submit' variant='primary' loading={loadingUpdate}>Save changes</Button>
+              </div>
+            </form>
+          )}
+        </div>
+      </FormShell>
+    </PageShell>
   )
 }
 

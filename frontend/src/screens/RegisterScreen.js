@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Form, Button, Row, Col } from 'react-bootstrap'
 import { useDispatch, useSelector } from 'react-redux'
-import Message from '../components/Message'
-import Loader from '../components/Loader'
-import FormContainer from '../components/FormContainer'
+import PageShell from '../components/good-shop/PageShell'
+import FormShell from '../components/good-shop/FormShell'
+import Field from '../components/good-shop/Field'
+import Button from '../components/good-shop/Button'
+import Alert from '../components/good-shop/Alert'
 import { register } from '../actions/userActions'
 
 const RegisterScreen = ({ location, history }) => {
@@ -15,88 +16,108 @@ const RegisterScreen = ({ location, history }) => {
   const [message, setMessage] = useState(null)
 
   const dispatch = useDispatch()
-
-  const userRegister = useSelector((state) => state.userRegister)
+  const userRegister = useSelector((s) => s.userRegister)
   const { loading, error, userInfo } = userRegister
 
   const redirect = location.search ? location.search.split('=')[1] : '/'
 
   useEffect(() => {
-    if (userInfo) {
-      history.push(redirect)
-    }
+    if (userInfo) history.push(redirect)
   }, [history, userInfo, redirect])
 
   const submitHandler = (e) => {
     e.preventDefault()
-    if (password !== confirmPassword) {
-      setMessage('Passwords do not match')
-    } else {
-      dispatch(register(name, email, password))
+    if (password.length < 8) {
+      setMessage('Use 8+ characters with letters and numbers.')
+      return
     }
+    if (password !== confirmPassword) {
+      setMessage("Passwords don't match yet.")
+      return
+    }
+    setMessage(null)
+    dispatch(register(name, email, password))
   }
 
+  const mismatch = confirmPassword && password !== confirmPassword
+
   return (
-    <FormContainer>
-      <h1>Sign Up</h1>
-      {message && <Message variant='danger'>{message}</Message>}
-      {error && <Message variant='danger'>{error}</Message>}
-      {loading && <Loader />}
-      <Form onSubmit={submitHandler}>
-        <Form.Group controlId='name'>
-          <Form.Label>Name</Form.Label>
-          <Form.Control
-            type='name'
-            placeholder='Enter name'
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          ></Form.Control>
-        </Form.Group>
+    <PageShell className='auth-bg' headerProps={{ logoStyle: 'gradient' }}>
+      <FormShell title='Create your account' subtitle='One bag, every brand.'>
+        <div className='aurora-border is-subtle' style={{ borderRadius: 'var(--radius-lg)', padding: 'var(--space-5)' }}>
+          {(message || error) && (
+            <div style={{ marginBottom: 'var(--space-3)' }}>
+              <Alert variant='destructive'>{message || error}</Alert>
+            </div>
+          )}
 
-        <Form.Group controlId='email'>
-          <Form.Label>Email Address</Form.Label>
-          <Form.Control
-            type='email'
-            placeholder='Enter email'
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          ></Form.Control>
-        </Form.Group>
+          <form onSubmit={submitHandler}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+              <Field
+                label='Full name'
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                autoComplete='name'
+                required
+              />
+              <Field
+                label='Email address'
+                type='email'
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete='email'
+                required
+              />
+              <Field
+                label='Password'
+                type='password'
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete='new-password'
+                hint='Use 8+ characters with letters and numbers.'
+                required
+              />
+              <Field
+                label='Confirm password'
+                type='password'
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                autoComplete='new-password'
+                error={mismatch ? "Passwords don't match yet." : undefined}
+                required
+              />
+            </div>
 
-        <Form.Group controlId='password'>
-          <Form.Label>Password</Form.Label>
-          <Form.Control
-            type='password'
-            placeholder='Enter password'
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          ></Form.Control>
-        </Form.Group>
+            <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 'var(--space-3)' }}>
+              By creating an account you agree to our{' '}
+              <a href='#terms' onClick={(e) => e.preventDefault()}>Terms</a>{' '}and{' '}
+              <a href='#privacy' onClick={(e) => e.preventDefault()}>Privacy policy</a>.
+            </p>
 
-        <Form.Group controlId='confirmPassword'>
-          <Form.Label>Confirm Password</Form.Label>
-          <Form.Control
-            type='password'
-            placeholder='Confirm password'
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-          ></Form.Control>
-        </Form.Group>
+            <div style={{ marginTop: 'var(--space-3)' }}>
+              <Button
+                type='submit'
+                variant='primary'
+                size='lg'
+                block
+                loading={loading}
+              >
+                Create account
+              </Button>
+            </div>
+          </form>
 
-        <Button type='submit' variant='primary'>
-          Register
-        </Button>
-      </Form>
+          <hr style={{ border: 'none', borderTop: '1px solid var(--border-subtle)', margin: 'var(--space-4) 0' }} />
 
-      <Row className='py-3'>
-        <Col>
-          Have an Account?{' '}
-          <Link to={redirect ? `/login?redirect=${redirect}` : '/login'}>
-            Login
-          </Link>
-        </Col>
-      </Row>
-    </FormContainer>
+          <p style={{ margin: 0, fontSize: 14, color: 'var(--foreground-2)' }}>
+            Already have an account?{' '}
+            <Link to={redirect ? `/login?redirect=${redirect}` : '/login'} style={{ fontWeight: 600 }}>
+              Sign in
+            </Link>
+          </p>
+        </div>
+      </FormShell>
+    </PageShell>
   )
 }
 

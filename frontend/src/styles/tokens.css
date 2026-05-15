@@ -1,0 +1,124 @@
+/* Good Shop — Preset D (aurora-commerce) design tokens.
+   Canonical source: docs/design/tokens.md */
+
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  /* Primitives */
+  --blue-50:   oklch(0.97 0.02 264);
+  --blue-100:  oklch(0.92 0.06 264);
+  --blue-300:  oklch(0.75 0.16 264);
+  --blue-500:  oklch(0.51 0.20 264);
+  --blue-600:  oklch(0.46 0.20 264);
+  --blue-700:  oklch(0.40 0.21 264);
+  --blue-900:  oklch(0.27 0.15 264);
+
+  --gray-0:    #FFFFFF;
+  --gray-25:   oklch(0.99 0.005 240);
+  --gray-50:   oklch(0.97 0.005 240);
+  --gray-100:  oklch(0.96 0.005 240);
+  --gray-200:  oklch(0.92 0.005 240);
+  --gray-300:  oklch(0.89 0.005 240);
+  --gray-400:  oklch(0.69 0.01 240);
+  --gray-500:  oklch(0.54 0.01 240);
+  --gray-700:  oklch(0.28 0.01 240);
+  --gray-900:  oklch(0.12 0.01 240);
+
+  --emerald-500:  oklch(0.72 0.16 162);
+  --red-500:      oklch(0.65 0.22 28);
+  --amber-500:    oklch(0.78 0.17 75);
+
+  /* Aurora signature gradient */
+  --aurora-stop-1: #FF9FCB;
+  --aurora-stop-2: #C5A9FF;
+  --aurora-stop-3: #8FC8FF;
+  --aurora-stop-4: #B5F0C8;
+  --aurora-stop-5: #FFD78F;
+  --aurora-gradient: linear-gradient(
+    90deg,
+    var(--aurora-stop-1) 0%,
+    var(--aurora-stop-2) 25%,
+    var(--aurora-stop-3) 50%,
+    var(--aurora-stop-4) 75%,
+    var(--aurora-stop-5) 100%
+  );
+
+  /* Semantic */
+  --background:      var(--gray-0);
+  --background-alt:  var(--gray-25);
+  --foreground:      var(--gray-900);
+  --foreground-2:    var(--gray-700);
+  --muted:           var(--gray-500);
+  --muted-2:         var(--gray-400);
+
+  --card:            var(--gray-100);
+  --card-alt:        var(--gray-200);
+  --surface-tinted:  var(--gray-50);
+
+  --primary:         var(--blue-500);
+  --primary-hover:   var(--blue-600);
+  --primary-active:  var(--blue-700);
+  --primary-fg:      #FFFFFF;
+
+  --success:         var(--emerald-500);
+  --destructive:     var(--red-500);
+  --warning:         var(--amber-500);
+
+  --border:          var(--gray-300);
+  --border-subtle:   var(--gray-100);
+  --ring:            var(--blue-500);
+
+  --best-deals-tint: oklch(0.66 0.20 312);
+  --live-dot:        var(--red-500);
+
+  /* Typography */
+  --font-display: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-body:    'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-mono:    'JetBrains Mono', 'IBM Plex Mono', monospace;
+
+  /* Radius — Preset D */
+  --radius-none: 0;
+  --radius-xs:   4px;
+  --radius-sm:   6px;
+  --radius-md:   12px;
+  --radius-lg:   16px;
+  --radius-xl:   20px;
+  --radius-pill: 9999px;
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 16px;
+  --space-4: 24px;
+  --space-5: 32px;
+  --space-6: 48px;
+  --space-7: 64px;
+
+  /* Motion */
+  --duration-fast:  150ms;
+  --duration-base:  220ms;
+  --duration-slow:  480ms;
+  --ease-entrance:    cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-interaction: cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* Touch targets (canonical, per tokens.md update) */
+  --target-min:     24px;
+  --target-default: 36px;
+  --target-primary: 44px;
+}
+
+[data-accent="midnight"] {
+  --primary:         oklch(0.30 0.15 264);
+  --primary-hover:   oklch(0.25 0.14 264);
+  --primary-active:  oklch(0.20 0.12 264);
+}
+[data-accent="emerald"] {
+  --primary:         oklch(0.55 0.16 162);
+  --primary-hover:   oklch(0.50 0.16 162);
+  --primary-active:  oklch(0.44 0.15 162);
+  --ring:            oklch(0.55 0.16 162);
+}
+[data-accent="aurora"] {
+  --primary:         oklch(0.51 0.20 264);
+  --primary-hover:   oklch(0.46 0.20 264);
+}

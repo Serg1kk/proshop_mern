@@ -1,0 +1,182 @@
+/* Good Shop — global base + signature elements scoped to .gs-root.
+   Limited to the Good Shop redesign tree so it does not collide with
+   the Bootstrap-driven pages still in flight. */
+
+.gs-root, .gs-root *, .gs-root *::before, .gs-root *::after { box-sizing: border-box; }
+
+.gs-root {
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.6;
+  background: var(--background);
+  color: var(--foreground);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.gs-root button { font-family: inherit; cursor: pointer; }
+.gs-root input  { font-family: inherit; }
+.gs-root a      { color: var(--primary); text-decoration: none; }
+.gs-root a:hover { text-decoration: underline; }
+
+.gs-root h1, .gs-root h2, .gs-root h3, .gs-root h4 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  margin: 0;
+  text-wrap: balance;
+  color: var(--foreground);
+}
+.gs-root h1 { font-size: 48px; line-height: 1.15; letter-spacing: -0.02em; }
+.gs-root h2 { font-size: 32px; line-height: 1.2;  letter-spacing: -0.015em; }
+.gs-root h3 { font-size: 24px; line-height: 1.3;  letter-spacing: -0.01em; font-weight: 600; }
+.gs-root h4 { font-size: 20px; line-height: 1.4;  letter-spacing: -0.005em; font-weight: 600; }
+
+.gs-root :focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+.gs-skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  background: var(--primary);
+  color: var(--primary-fg);
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  z-index: 9999;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 14px;
+}
+.gs-skip-link:focus { left: 8px; top: 8px; }
+
+/* Aurora border — animated gradient stroke */
+.aurora-border {
+  position: relative;
+  background-color: var(--background);
+  z-index: 0;
+}
+.aurora-border::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 2px;
+  background: var(--aurora-gradient);
+  background-size: 300% 300%;
+  animation: aurora-drift 8s ease-in-out infinite;
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  pointer-events: none;
+  z-index: -1;
+}
+.aurora-border.is-static::before { animation: none; background-position: 50% 50%; }
+.aurora-border.is-subtle::before { animation-duration: 20s; opacity: 0.7; }
+
+@keyframes aurora-drift {
+  0%, 100% { background-position: 0% 50%; }
+  50%      { background-position: 100% 50%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aurora-border::before { animation: none; background-position: 50% 50%; }
+  .ai-text { animation: none; }
+}
+
+/* Price lockup */
+.price-lockup {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  font-family: var(--font-display);
+}
+.price-num {
+  font-weight: 700;
+  font-size: 1.125rem;
+  letter-spacing: -0.01em;
+  color: var(--foreground);
+}
+.price-currency {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  vertical-align: top;
+  margin-top: 0.15em;
+}
+.price-lockup.is-lg .price-num { font-size: 1.75rem; }
+.price-lockup.is-lg .price-currency { font-size: 0.8125rem; }
+.price-lockup.is-from::before {
+  content: 'From';
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-right: var(--space-2);
+  align-self: center;
+}
+
+/* Aurora wordmark text */
+.ai-text {
+  background: var(--aurora-gradient);
+  background-size: 200% 200%;
+  -webkit-background-clip: text;
+          background-clip: text;
+  color: transparent;
+  animation: aurora-drift 12s ease-in-out infinite;
+  font-weight: 800;
+}
+
+/* Placeholder fallback for product imagery */
+.ph {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  background-color: var(--gray-200);
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent 0,
+    transparent 10px,
+    rgba(255, 255, 255, 0.5) 10px,
+    rgba(255, 255, 255, 0.5) 11px
+  );
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-start;
+  padding: 10px;
+}
+.ph .ph-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.3;
+  color: var(--gray-700);
+  background: rgba(255, 255, 255, 0.85);
+  padding: 4px 6px;
+  border-radius: var(--radius-xs);
+  max-width: 100%;
+}
+.ph img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}
+.ph[data-tint="rose"]    { background-color: oklch(0.92 0.04 20);  }
+.ph[data-tint="violet"]  { background-color: oklch(0.90 0.05 290); }
+.ph[data-tint="sky"]     { background-color: oklch(0.91 0.04 230); }
+.ph[data-tint="mint"]    { background-color: oklch(0.91 0.04 162); }
+.ph[data-tint="amber"]   { background-color: oklch(0.93 0.05 75);  }
+.ph[data-tint="slate"]   { background-color: oklch(0.86 0.01 240); }
+.ph[data-tint="indigo"]  { background-color: oklch(0.85 0.07 264); }
+.ph[data-tint="coral"]   { background-color: oklch(0.85 0.08 30);  }
