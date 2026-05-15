@@ -65,7 +65,7 @@ Plus при `scrollIntoView()` всегда передавать `{ block: 'cent
 
 **Recommendation для proshop_mern:** primary actions (Add to Cart, Checkout, Sign In, Submit) — **44×44px** (Apple HIG, рекомендация для тач-устройств). Меньшие targets — 24×24 минимум.
 
-**Tokens:**
+**Tokens** (canonical source: [`tokens.md#touch-target-tokens`](tokens.md#specific-component-sizing-for-preset-d)):
 
 ```css
 :root {

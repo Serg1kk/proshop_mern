@@ -82,7 +82,8 @@ proshop_mern/
 --primary         primary action color
 --primary-fg      text on primary bg
 --muted           muted text, hints
---accent          highlight, secondary CTA
+--accent          highlight, secondary CTA (presets A/B/C — solid color)
+--accent-gradient signature gradient (Preset D only — background-image, NOT color)
 --destructive     errors, delete
 --success         confirmations
 --warning         soft warnings
@@ -149,6 +150,8 @@ caption   12px   weight 500   tracking +0.01em   — labels
 
 ## §4 — Border Radius
 
+**M4 canonical scale** (general reference):
+
 ```
 none    0px      tables, data grids, brutalist accents
 sm      4px      badges, chips, code blocks
@@ -157,6 +160,20 @@ lg      12px     cards (default)
 xl      16px     modals, popovers
 full    9999px   pills, avatars, toggles, primary CTA (luxury only)
 ```
+
+**Active scale — Preset D (aurora-commerce, locked 2026-05-14):**
+
+```
+none    0px      tables, data grids
+xs      4px      size pills (XS S M L)
+sm      6px      small badges, image inside product card
+md      12px     cards (product, brand, protection, delivery tile)  ← default
+lg      16px     AI panel sections, modal
+xl      20px     oversized cards
+pill    9999px   buttons, filter chips, suggestion chips, search bar  ← default for CTAs
+```
+
+> **Note:** Preset D shifts the default button radius from `md 8px` (canonical) to `pill 9999`, and default card radius from `lg 12px` (canonical = match here) to `md 12px` (renamed). Components MUST reference Preset D names (`--radius-md`, `--radius-pill`) via [`docs/design/tokens.md#radius`](docs/design/tokens.md#radius) — not the M4-canon labels above.
 
 Финальная подборка по направлению — в [`tokens.md#radius`](docs/design/tokens.md#radius).
 

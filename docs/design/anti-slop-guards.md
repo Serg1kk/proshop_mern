@@ -108,8 +108,8 @@ Be a human designer so it doesn't look like AI. With design taste.
 
 | Property | Default | Allowed alternative |
 |----------|---------|---------------------|
-| `font-family` body | `Inter`, system-ui as primary | Per Design.md §2 (depends on D1) |
-| Primary color | `#6366f1` indigo | TBD per D1 / preset selected |
+| `font-family` body | `Inter`, system-ui as primary | **Plus Jakarta Sans** (Preset D, locked 2026-05-14). Per Design.md §2. |
+| Primary color | `#6366f1` indigo | **`#1F4FCF` royal blue** (Preset D `--primary`). Components reference `var(--primary)` only. |
 | Hero gradient | `linear-gradient(... purple ...)` | Solid `var(--background)` or subtle bg pattern |
 | Card border | `2px solid #...` | `1px solid var(--border)` |
 | Card shadow | `box-shadow: 0 10px 25px ...` | None (depth via bg contrast) |

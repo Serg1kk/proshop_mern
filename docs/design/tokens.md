@@ -108,7 +108,7 @@ Step: 50    100    200    300    400    500    600    700    800    900    950
   --primary-active:  var(--blue-700);
   --primary-fg:      #FFFFFF;
 
-  --accent:          var(--aurora-gradient);  /* used only for signature */
+  --accent-gradient: var(--aurora-gradient);  /* gradient ONLY — use as background-image, not color/border-color */
   --success:         var(--emerald-500);
   --destructive:     var(--red-500);
   --warning:         var(--amber-500);
@@ -187,6 +187,18 @@ Brand card height:        80-92px
 Product image padding:    16px around image inside --card bg
 AI drawer width:          384px (desktop), full width (mobile bottom-sheet)
 ```
+
+**Touch-target tokens (WCAG 2.2 §2.5.8 + Apple HIG):**
+
+```css
+:root {
+  --target-min:     24px;   /* WCAG 2.2 minimum — icon buttons */
+  --target-default: 40px;   /* secondary buttons, chips */
+  --target-primary: 44px;   /* primary actions, sticky buy bars */
+}
+```
+
+См. [`accessibility.md#touch-targets`](accessibility.md#touch-targets--minimum-2424-primary-4444).
 
 ---
 
@@ -418,6 +430,8 @@ Container max-width:    1200px standard / 720px sm / 480px xs
 ---
 
 ## Radius
+
+> **Active project uses Preset D values** (see [§ Preset D — aurora-commerce](#preset-d--aurora-commerce-emox-inspired--active) above). The generic scale below is a M4-canonical reference kept for non-D presets (A / B / C). If pivoting to another preset, swap component CSS to its scale.
 
 ```css
 :root {

@@ -125,17 +125,17 @@ frontend/
 **Redesign (emox-style):**
 - Breadcrumb top: Home / Category / Sub / ProductName.
 - 50/50 split: image-zone left, details-zone right.
-- Image-zone: main image в tinted card `--card` bg, heart + share icons top-right, 5-thumbnail strip below (selected — `AuroraBorder.--static`).
+- Image-zone: main image в tinted card `--card` bg, heart + share icons top-right, 5-thumbnail strip below (selected — `AuroraBorder.is-static`).
 - Details-zone:
   - Brand link (small `--primary` color).
   - h1 product title.
   - StarRating + review count + Compare link (with double-arrow icon).
   - SizeSelector pills (square radius, mutually exclusive).
-  - PriceLockup `.--lg` («From 402.32 AED»).
+  - PriceLockup `.is-lg` («From 402.32 AED»).
   - BNPLRow («As low as $38/mo with tabby + tamara · Learn how»).
   - Primary CTA «Add to cart» — pill, full-width, 56px tall.
   - ProtectionPlanCard (упсель, 2-3 plan options).
-  - "How you'll get this item:" + DeliveryOptionTile pair (Shipping selected `AuroraBorder.--static` / Pickup disabled).
+  - "How you'll get this item:" + DeliveryOptionTile pair (Shipping selected `AuroraBorder.is-static` / Pickup disabled).
   - LocationIndicator row: «Sacramento, 96898 Change · Arrives Fri, Feb 20 · More option».
   - SellerInfoBlock.
   - "Free Shipping Details" + "Free 30-day returns Details" rows w/ icons.

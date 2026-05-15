@@ -89,8 +89,10 @@ Color stops:
 | Variant | Class | Use case |
 |---------|-------|----------|
 | Animated (default) | `.aurora-border` | Always-on AI inputs (search, AI prompt) |
-| Static | `.aurora-border.--static` | Selected non-AI elements (thumbnail, delivery tile) — no animation, gradient frozen |
-| Subtle | `.aurora-border.--subtle` | Idle states — single hue + low chroma, animated very slowly (~20s) — hints at AI без attention demand |
+| Static | `.aurora-border.is-static` | Selected non-AI elements (thumbnail, delivery tile) — no animation, gradient frozen |
+| Subtle | `.aurora-border.is-subtle` | Idle states — single hue + low chroma, animated very slowly (~20s) — hints at AI без attention demand |
+
+> **Naming convention:** modifier classes use `.is-*` prefix (Suit CSS / common React-friendly form), not `.--*` BEM double-dash. Old BEM-style names were aligned to `.is-*` 2026-05-14 during proshop_mern Phase 0 to match implementation in `frontend/src/styles/signature.css`.
 
 ### Usage examples
 
@@ -103,7 +105,7 @@ Color stops:
 </div>
 
 // Selected thumbnail
-<button className={cn('thumbnail', isSelected && 'aurora-border --static')}>
+<button className={cn('thumbnail', isSelected && 'aurora-border is-static')}>
   <img src={...} alt="..." />
 </button>
 ```
@@ -266,9 +268,9 @@ Spacing:              2px gap between number and currency (no comma, no space)
 
 ### Variants
 
-- `.price-lockup.--lg` — 24-28px number для PDP price.
-- `.price-lockup.--strike` — number имеет line-through, для original price before discount.
-- `.price-lockup.--from` — "From" prefix small uppercase muted: «From 402.32 AED».
+- `.price-lockup.is-lg` — 24-28px number для PDP price.
+- `.price-lockup.is-strike` — number имеет line-through, для original price before discount.
+- `.price-lockup.is-from` — "From" prefix small uppercase muted: «From 402.32 AED».
 
 ---
 
