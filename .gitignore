@@ -29,3 +29,6 @@ yarn-error.log*
 mcp/.venv/
 mcp/__pycache__/
 mcp/**/__pycache__/
+
+# local backups (e.g. .env.bak, package.json.bak — accidental safety copies)
+*.bak
